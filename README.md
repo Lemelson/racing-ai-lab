@@ -62,7 +62,8 @@ Racing AI Lab делает эти условия явными и проверя�
 
 - seeded PRNG и воспроизводимые поколения;
 - elitism, crossover и mutation;
-- обучение в отдельном Web Worker без блокировки интерфейса;
+- координатор обучения и автоматический пул Web Workers по числу CPU-потоков;
+- детерминированное распределение genomes между ядрами без изменения seed;
 - честный счётчик реально выполненных simulation steps;
 - обучение на одной или нескольких трассах;
 - отдельный sensor rig для каждой трассы;
@@ -113,6 +114,26 @@ Racing AI Lab делает эти условия явными и проверя�
 - история fitness по поколениям;
 - данные лидера и альтернатив для выбранной трассы;
 - отображение производительности в simulation steps/second.
+- живой прогресс каждого поколения, ETA и фактическое число Workers;
+- выбор автоматического или ручного размера CPU-пула.
+
+### Использование всех ядер Apple Silicon
+
+Браузер сообщает `navigator.hardwareConcurrency`, после чего режим
+**Авто — максимум Mac** создаёт до одного evaluator Worker на каждый логический
+CPU-поток. Координатор сохраняет population, seed, ranking и mutation в одном
+месте, поэтому порядок завершения Workers не меняет результат эволюции.
+
+Контрольный локальный прогон на M1 Max, `40` машин, одна трасса, `30` секунд:
+
+| Режим | Производительность |
+| --- | ---: |
+| 1 Worker | 3 264 шагов/с |
+| 10 Workers | 16 877 шагов/с |
+
+Это около `5,2×` ускорения при полностью совпавших fitness, progress и
+checkpoint. Абсолютные значения зависят от сложности трассы, фоновой нагрузки,
+температуры Mac и доли машин, которые рано сходят с трассы.
 
 ### Локальные артефакты
 
@@ -189,7 +210,7 @@ npm run check
 npm test
 ```
 
-На момент первой публичной версии проходят 86 автоматических тестов.
+В текущей версии проходят 98 автоматических тестов.
 
 ## Как пользоваться
 
@@ -198,7 +219,7 @@ npm test
 3. Замкните маршрут и сохраните версию.
 4. Перейдите в **Симуляцию**.
 5. Выберите основную и дополнительные трассы.
-6. Настройте population, поколения, длительность заезда, seed и сеть.
+6. Настройте population, поколения, длительность заезда, seed, сеть и CPU Workers.
 7. Запустите обучение.
 8. Переключайтесь между поколениями, трассами и количеством видимых агентов.
 9. Сохраните лучший запуск, checkpoint и replay.
@@ -209,12 +230,13 @@ npm test
 Track editor ──> versioned track definitions
                         │
                         ▼
-UI thread ─────> training-worker.js ─────> evolution loop
+UI thread ─────> training-worker.js ─────> evolution coordinator
     │                       │                    │
     │                       ▼                    ▼
-    │                 simulation core      neural network
-    │                       │                    │
-    └──── smooth replay <── artifacts <─────────┘
+    │             evaluator Worker pool    ranking + mutation
+    │                 │   │   │                  │
+    │                 ▼   ▼   ▼                  ▼
+    └──── smooth replay <── generation artifacts
                 │
                 ▼
       charts, agents, sensors, weights
@@ -225,7 +247,8 @@ UI thread ─────> training-worker.js ─────> evolution loop
 | Путь | Назначение |
 | --- | --- |
 | `src/app.js` | UI, редактор, renderer, replay и orchestration |
-| `src/training-worker.js` | Фоновое обучение вне UI thread |
+| `src/training-worker.js` | Координатор поколения и пула CPU Workers |
+| `src/training-evaluator-worker.js` | Независимая оценка batches genomes |
 | `src/core/course.js` | Трасса, проекция, прогресс и raycast |
 | `src/core/road-surface.js` | Общая геометрия дорожного покрытия |
 | `src/core/vehicle.js` | Детерминированная физика автомобиля |
@@ -235,6 +258,7 @@ UI thread ─────> training-worker.js ─────> evolution loop
 | `src/core/evolution.js` | Genome, mutation, crossover и elitism |
 | `src/core/fitness.js` | Проверяемый scoring |
 | `src/core/training.js` | Оценка population на наборах трасс |
+| `src/core/training-pool.js` | Выбор числа Workers и балансировка задач |
 | `src/core/training-analysis.js` | Лидеры трасс и история fitness |
 | `src/core/replay.js` | Интерполяция и история replay |
 | `src/core/catalog.js` | Локальные версии трасс и сохранённые запуски |

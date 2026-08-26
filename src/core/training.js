@@ -40,7 +40,7 @@ function normalizedAction(network, observation) {
   };
 }
 
-function evaluateGenome({
+export function evaluateGenome({
   course,
   genome,
   episodeSteps,
@@ -199,6 +199,106 @@ function shuffledTracks(tracks, rng) {
   return result;
 }
 
+export function createTrainingEvaluator({ course, tracks, config }) {
+  const normalizedTracks = normalizeTracks({ course, tracks });
+  const episodeSteps = positiveInteger(config?.episodeSteps, "Episode steps");
+  const hiddenLayers = [...(config?.hiddenLayers ?? [10])];
+  const tracksByKey = new Map(
+    normalizedTracks.map((track) => [track.key, track]),
+  );
+
+  function evaluate(task, options = {}) {
+    const populationIndex = Number(task?.populationIndex);
+    const genes = [...(task?.genes ?? [])];
+    if (!Number.isInteger(populationIndex) || populationIndex < 0) {
+      throw new RangeError("Evaluation task needs a population index.");
+    }
+    if (genes.length === 0 || !genes.every(Number.isFinite)) {
+      throw new TypeError("Evaluation task needs finite genome genes.");
+    }
+    const trackOrder =
+      options.trackOrder ?? normalizedTracks.map((track) => track.key);
+    if (
+      !Array.isArray(trackOrder) ||
+      trackOrder.length !== normalizedTracks.length ||
+      new Set(trackOrder).size !== normalizedTracks.length ||
+      trackOrder.some((key) => !tracksByKey.has(key))
+    ) {
+      throw new RangeError("Evaluation track order must include every track.");
+    }
+    const onProgress =
+      typeof options.onProgress === "function" ? options.onProgress : null;
+    let completedEpisodes = 0;
+    let completedSteps = 0;
+    let bestObservedFitness = 0;
+    let bestObservedProgress = 0;
+    const episodes = trackOrder.map((trackKey) => {
+      const track = tracksByKey.get(trackKey);
+      const episode = evaluateGenome({
+        course: track.course,
+        genome: { genes },
+        episodeSteps,
+        sensors: track.sensors,
+        hiddenLayers,
+        onStep(update) {
+          onProgress?.({
+            populationIndex,
+            completedEpisodes,
+            totalEpisodes: trackOrder.length,
+            completedSteps: completedSteps + update.stepsExecuted,
+            totalStepBudget: trackOrder.length * episodeSteps,
+            bestObservedFitness: Math.max(
+              bestObservedFitness,
+              (update.score / track.course.length) * 100,
+            ),
+            bestObservedProgress: Math.max(
+              bestObservedProgress,
+              update.maxProgress,
+            ),
+            trackKey: track.key,
+            trackName: track.name,
+            episodeComplete: false,
+          });
+        },
+      });
+      completedEpisodes += 1;
+      completedSteps += episode.stepsExecuted;
+      bestObservedFitness = Math.max(
+        bestObservedFitness,
+        (episode.fitness / track.course.length) * 100,
+      );
+      bestObservedProgress = Math.max(
+        bestObservedProgress,
+        episode.maxProgress,
+      );
+      onProgress?.({
+        populationIndex,
+        completedEpisodes,
+        totalEpisodes: trackOrder.length,
+        completedSteps,
+        totalStepBudget: trackOrder.length * episodeSteps,
+        bestObservedFitness,
+        bestObservedProgress,
+        trackKey: track.key,
+        trackName: track.name,
+        episodeComplete: true,
+      });
+      return {
+        trackKey: track.key,
+        episode,
+      };
+    });
+    return {
+      populationIndex,
+      episodes,
+    };
+  }
+
+  return Object.freeze({
+    evaluate,
+  });
+}
+
 export function createTrainingLane({ course, tracks, config }) {
   const normalizedTracks = normalizeTracks({ course, tracks });
 
@@ -241,71 +341,82 @@ export function createTrainingLane({ course, tracks, config }) {
   let generation = 0;
   let totalSteps = 0;
   let lastResult = null;
+  let pendingPlan = null;
+  const evaluator = createTrainingEvaluator({
+    tracks: normalizedTracks,
+    config: {
+      episodeSteps,
+      hiddenLayers: evolution.network.hiddenLayers,
+    },
+  });
 
-  function trainGeneration(options = {}) {
-    const onProgress =
-      typeof options.onProgress === "function" ? options.onProgress : null;
+  function createGenerationPlan() {
+    if (pendingPlan) {
+      throw new Error("The current generation plan has not been completed.");
+    }
     const orderedTracks = shuffledTracks(normalizedTracks, orderRng);
-    const totalEpisodes = populationSize * orderedTracks.length;
-    const totalStepBudget = totalEpisodes * episodeSteps;
-    let completedEpisodes = 0;
-    let completedSteps = 0;
-    let bestObservedFitness = 0;
-    let bestObservedProgress = 0;
+    const plan = {
+      generation: generation + 1,
+      trackOrder: orderedTracks.map((track) => track.key),
+      totalEpisodes: populationSize * orderedTracks.length,
+      totalStepBudget: populationSize * orderedTracks.length * episodeSteps,
+      tasks: population.map((genome, populationIndex) => ({
+        populationIndex,
+        genes: [...genome.genes],
+      })),
+    };
+    pendingPlan = {
+      ...plan,
+      orderedTracks,
+    };
+    return structuredClone(plan);
+  }
+
+  function completeGenerationPlan(evaluations) {
+    if (!pendingPlan) {
+      throw new Error("Create a generation plan before completing it.");
+    }
+    if (!Array.isArray(evaluations) || evaluations.length !== populationSize) {
+      throw new RangeError("Generation evaluations must cover the population.");
+    }
+    const byPopulationIndex = new Map();
+    for (const evaluation of evaluations) {
+      if (
+        !Number.isInteger(evaluation?.populationIndex) ||
+        evaluation.populationIndex < 0 ||
+        evaluation.populationIndex >= populationSize ||
+        byPopulationIndex.has(evaluation.populationIndex)
+      ) {
+        throw new RangeError("Generation evaluations need unique population indices.");
+      }
+      byPopulationIndex.set(evaluation.populationIndex, evaluation);
+    }
+    const orderedTracks = pendingPlan.orderedTracks;
+    const completedSteps = evaluations.reduce(
+      (sum, evaluation) =>
+        sum +
+        evaluation.episodes.reduce(
+          (episodeSum, entry) => episodeSum + entry.episode.stepsExecuted,
+          0,
+        ),
+      0,
+    );
     const evaluated = population.map((genome, populationIndex) => {
+      const evaluation = byPopulationIndex.get(populationIndex);
+      if (!evaluation || evaluation.episodes.length !== orderedTracks.length) {
+        throw new RangeError("Each genome must be evaluated on every track.");
+      }
       const episodes = orderedTracks.map((track) => {
-        const episode = evaluateGenome({
-          course: track.course,
-          genome,
-          episodeSteps,
-          sensors: track.sensors,
-          hiddenLayers: evolution.network.hiddenLayers,
-          onStep(update) {
-            onProgress?.({
-              generation: generation + 1,
-              completedEpisodes,
-              totalEpisodes,
-              completedSteps: completedSteps + update.stepsExecuted,
-              totalStepBudget,
-              bestObservedFitness: Math.max(
-                bestObservedFitness,
-                (update.score / track.course.length) * 100,
-              ),
-              bestObservedProgress: Math.max(
-                bestObservedProgress,
-                update.maxProgress,
-              ),
-              populationIndex,
-              trackKey: track.key,
-              trackName: track.name,
-              episodeComplete: false,
-            });
-          },
-        });
-        completedEpisodes += 1;
-        completedSteps += episode.stepsExecuted;
-        bestObservedFitness = Math.max(
-          bestObservedFitness,
-          (episode.fitness / track.course.length) * 100,
+        const result = evaluation.episodes.find(
+          (entry) => entry.trackKey === track.key,
         );
-        bestObservedProgress = Math.max(
-          bestObservedProgress,
-          episode.maxProgress,
-        );
-        onProgress?.({
-          generation: generation + 1,
-          completedEpisodes,
-          totalEpisodes,
-          completedSteps,
-          totalStepBudget,
-          bestObservedFitness,
-          bestObservedProgress,
-          populationIndex,
-          trackKey: track.key,
-          trackName: track.name,
-          episodeComplete: true,
-        });
-        return { track, episode };
+        if (!result?.episode) {
+          throw new RangeError("Evaluation result is missing a track.");
+        }
+        return {
+          track,
+          episode: result.episode,
+        };
       });
       const normalizedScores = episodes.map(
         ({ track, episode }) =>
@@ -325,6 +436,7 @@ export function createTrainingLane({ course, tracks, config }) {
         episodes,
       };
     });
+    pendingPlan = null;
     evaluated.sort(
       (left, right) =>
         right.aggregateFitness - left.aggregateFitness ||
@@ -507,6 +619,50 @@ export function createTrainingLane({ course, tracks, config }) {
     return structuredClone(result);
   }
 
+  function trainGeneration(options = {}) {
+    const onProgress =
+      typeof options.onProgress === "function" ? options.onProgress : null;
+    const plan = createGenerationPlan();
+    let completedEpisodes = 0;
+    let completedSteps = 0;
+    let bestObservedFitness = 0;
+    let bestObservedProgress = 0;
+    const evaluations = plan.tasks.map((task) => {
+      const baseEpisodes = completedEpisodes;
+      const baseSteps = completedSteps;
+      const evaluation = evaluator.evaluate(task, {
+        trackOrder: plan.trackOrder,
+        onProgress(update) {
+          bestObservedFitness = Math.max(
+            bestObservedFitness,
+            update.bestObservedFitness,
+          );
+          bestObservedProgress = Math.max(
+            bestObservedProgress,
+            update.bestObservedProgress,
+          );
+          onProgress?.({
+            ...update,
+            generation: plan.generation,
+            completedEpisodes: baseEpisodes + update.completedEpisodes,
+            totalEpisodes: plan.totalEpisodes,
+            completedSteps: baseSteps + update.completedSteps,
+            totalStepBudget: plan.totalStepBudget,
+            bestObservedFitness,
+            bestObservedProgress,
+          });
+        },
+      });
+      completedEpisodes += evaluation.episodes.length;
+      completedSteps += evaluation.episodes.reduce(
+        (sum, entry) => sum + entry.episode.stepsExecuted,
+        0,
+      );
+      return evaluation;
+    });
+    return completeGenerationPlan(evaluations);
+  }
+
   function snapshot() {
     const snapshot = {
       id: config.id,
@@ -564,6 +720,8 @@ export function createTrainingLane({ course, tracks, config }) {
 
   return Object.freeze({
     trainGeneration,
+    createGenerationPlan,
+    completeGenerationPlan,
     snapshot,
     replaySnapshot,
   });

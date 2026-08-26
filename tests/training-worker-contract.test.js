@@ -45,6 +45,7 @@ test("a deep training start payload survives structured cloning", () => {
     config: deepConfig,
     targetGeneration: 5,
     speed: "fast",
+    workerCount: "auto",
   });
 
   const cloned = structuredClone(payload);
@@ -53,6 +54,7 @@ test("a deep training start payload survives structured cloning", () => {
   assert.deepEqual(cloned.config.hiddenLayers, [16, 8]);
   assert.equal(cloned.targetGeneration, 5);
   assert.equal(cloned.speed, "fast");
+  assert.equal(cloned.workerCount, "auto");
   assert.deepEqual(cloned.tracks[0].definition, trackDefinition);
   assert.doesNotThrow(() => validateTrainingStartPayload(cloned));
 });
@@ -105,5 +107,36 @@ test("training start payloads reject invalid track definitions", () => {
         speed: "normal",
       }),
     /three/i,
+  );
+});
+
+test("training start payload accepts automatic or explicit worker counts", () => {
+  const automatic = createTrainingStartPayload({
+    tracks: [{ key: "primary", definition: trackDefinition }],
+    config: deepConfig,
+    targetGeneration: 1,
+    speed: "fast",
+    workerCount: "auto",
+  });
+  const explicit = createTrainingStartPayload({
+    tracks: [{ key: "primary", definition: trackDefinition }],
+    config: deepConfig,
+    targetGeneration: 1,
+    speed: "fast",
+    workerCount: 4,
+  });
+
+  assert.equal(automatic.workerCount, "auto");
+  assert.equal(explicit.workerCount, 4);
+  assert.throws(
+    () =>
+      createTrainingStartPayload({
+        tracks: [{ key: "primary", definition: trackDefinition }],
+        config: deepConfig,
+        targetGeneration: 1,
+        speed: "fast",
+        workerCount: 0,
+      }),
+    /worker/i,
   );
 });

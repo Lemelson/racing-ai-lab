@@ -39,6 +39,14 @@ function normalizeTracks(tracks) {
   return normalized;
 }
 
+function normalizeWorkerCount(value) {
+  if (value == null || value === "auto") return "auto";
+  if (!Number.isInteger(value) || value < 1 || value > 64) {
+    throw new RangeError("Training worker count must be auto or an integer from 1 to 64.");
+  }
+  return value;
+}
+
 export function validateTrainingStartPayload(payload) {
   if (!payload || typeof payload !== "object" || payload.type !== "start") {
     throw new TypeError("Training start payload must have type start.");
@@ -61,6 +69,7 @@ export function validateTrainingStartPayload(payload) {
       "Target generation",
     ),
     speed,
+    workerCount: normalizeWorkerCount(payload.workerCount),
   };
 }
 

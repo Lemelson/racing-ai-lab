@@ -552,6 +552,17 @@
                     inputmode="numeric"
                   />
                 </label>
+
+                <label class="field-control">
+                  <span>CPU Workers</span>
+                  <select id="worker-count">
+                    <option value="auto" selected>Авто — максимум Mac</option>
+                    <option value="1">1 — сравнение</option>
+                  </select>
+                  <small id="worker-count-help">
+                    Определяем доступные ядра…
+                  </small>
+                </label>
               </div>
 
               <section
@@ -756,6 +767,10 @@
                   <div>
                     <dt>Seed</dt>
                     <dd id="running-seed">20260826</dd>
+                  </div>
+                  <div class="is-wide">
+                    <dt>Параллельный CPU-пул</dt>
+                    <dd id="running-workers">Авто · определяем ядра…</dd>
                   </div>
                   <div class="is-wide">
                     <dt>Оценка на трассах</dt>

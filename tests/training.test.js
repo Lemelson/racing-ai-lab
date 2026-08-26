@@ -5,6 +5,7 @@ import { createCourse } from "../src/core/course.js";
 import { TRACK_PRESETS } from "../src/core/presets.js";
 import {
   aggregateTrackScores,
+  createTrainingEvaluator,
   createTrainingLane,
 } from "../src/core/training.js";
 
@@ -253,4 +254,47 @@ test("a long generation reports monotonic episode progress before it completes",
     ),
   );
   assert.equal(progress.at(-1).completedSteps, result.steps);
+});
+
+test("a serializable generation plan can be evaluated out of order and committed deterministically", () => {
+  const tracks = [
+    { key: "track:a", name: "A", course: trainingCourse },
+    {
+      key: "track:b",
+      name: "B",
+      course: createCourse({
+        id: "parallel-b",
+        width: 100,
+        points: [
+          { x: 0, y: 0 },
+          { x: 240, y: 0 },
+          { x: 240, y: 180 },
+          { x: 0, y: 180 },
+        ],
+      }),
+    },
+  ];
+  const config = {
+    ...laneConfig,
+    populationSize: 6,
+    episodeSteps: 12,
+  };
+  const sequentialLane = createTrainingLane({ tracks, config });
+  const plannedLane = createTrainingLane({ tracks, config });
+  const evaluator = createTrainingEvaluator({ tracks, config });
+
+  const expected = sequentialLane.trainGeneration();
+  const plan = plannedLane.createGenerationPlan();
+  const evaluations = plan.tasks
+    .map((task) => evaluator.evaluate(task, { trackOrder: plan.trackOrder }))
+    .reverse();
+  const actual = plannedLane.completeGenerationPlan(evaluations);
+
+  assert.equal(structuredClone(plan).tasks.length, config.populationSize);
+  assert.equal(actual.generation, expected.generation);
+  assert.equal(actual.steps, expected.steps);
+  assert.equal(actual.bestFitness, expected.bestFitness);
+  assert.equal(actual.medianFitness, expected.medianFitness);
+  assert.deepEqual(actual.trackOrder, expected.trackOrder);
+  assert.deepEqual(actual.checkpoint.genes, expected.checkpoint.genes);
 });

@@ -103,6 +103,8 @@ const elements = {
   networkParameterCount: byId("network-parameter-count"),
   networkExplanation: byId("network-explanation"),
   seed: byId("seed"),
+  workerCount: byId("worker-count"),
+  workerCountHelp: byId("worker-count-help"),
   budgetSummary: byId("budget-summary"),
   simulationStart: byId("simulation-start"),
   runningControls: byId("running-controls"),
@@ -126,6 +128,7 @@ const elements = {
   runningNetwork: byId("running-network"),
   runningEvolution: byId("running-evolution"),
   runningSeed: byId("running-seed"),
+  runningWorkers: byId("running-workers"),
   runningAggregate: byId("running-aggregate"),
   runningBudget: byId("running-budget"),
   replayStatus: byId("replay-status"),
@@ -203,6 +206,11 @@ let trainingWorker = null;
 let trainingRunning = false;
 let trainingPaused = false;
 let trainingSpeed = "normal";
+let activeWorkerCount = 0;
+let detectedHardwareConcurrency = Math.max(
+  1,
+  Math.floor(Number(navigator.hardwareConcurrency) || 1),
+);
 let targetGeneration = 50;
 let replayClock = 0;
 let replayRate = 1;
@@ -250,6 +258,49 @@ function russianPlural(value, one, few, many) {
   if (last === 1) return one;
   if (last >= 2 && last <= 4) return few;
   return many;
+}
+
+function automaticWorkerCount() {
+  return Math.max(
+    1,
+    Math.min(
+      Number(elements.populationSize.value) || 1,
+      detectedHardwareConcurrency,
+    ),
+  );
+}
+
+function selectedWorkerCount() {
+  return elements.workerCount.value === "auto"
+    ? "auto"
+    : Math.max(1, Number(elements.workerCount.value) || 1);
+}
+
+function renderWorkerCountOptions() {
+  const selected = elements.workerCount.value || "auto";
+  const automatic = automaticWorkerCount();
+  elements.workerCount.replaceChildren();
+  const automaticOption = document.createElement("option");
+  automaticOption.value = "auto";
+  automaticOption.textContent =
+    `Авто — ${automatic} Workers из ${detectedHardwareConcurrency} ядер`;
+  elements.workerCount.append(automaticOption);
+  for (let count = 1; count <= detectedHardwareConcurrency; count += 1) {
+    const option = document.createElement("option");
+    option.value = String(count);
+    option.textContent =
+      count === detectedHardwareConcurrency
+        ? `${count} — все вычислительные потоки`
+        : `${count} Workers`;
+    elements.workerCount.append(option);
+  }
+  elements.workerCount.value =
+    selected === "auto" ||
+    Number(selected) <= detectedHardwareConcurrency
+      ? selected
+      : "auto";
+  elements.workerCountHelp.textContent =
+    `Mac сообщает ${detectedHardwareConcurrency} логических ядер. Авто запускает ${automatic} вычислительных Workers — по одному на каждый логический CPU-поток.`;
 }
 
 function uniqueTrackId() {
@@ -1454,6 +1505,12 @@ function renderRunningConfiguration() {
   elements.runningEvolution.textContent =
     `${formatInteger(config.eliteCount)} элиты · mutation ${Math.round(config.mutationRate * 100)}% / ${String(config.mutationScale).replace(".", ",")}`;
   elements.runningSeed.textContent = String(config.seed);
+  elements.runningWorkers.textContent =
+    activeWorkerCount > 0
+      ? `${activeWorkerCount} вычислительных Workers · ${detectedHardwareConcurrency} логических ядер`
+      : selectedWorkerCount() === "auto"
+        ? `Авто · ${automaticWorkerCount()} вычислительных Workers`
+        : `${selectedWorkerCount()} вычислительных Workers`;
   elements.runningAggregate.textContent =
     `${elements.aggregateMode.selectedOptions[0]?.textContent ?? config.aggregateMode} · ${config.trackCount} ${russianPlural(config.trackCount, "трасса", "трассы", "трасс")}`;
   elements.runningBudget.textContent =
@@ -1476,6 +1533,15 @@ function resetTrainingTelemetry() {
 }
 
 function handleTrainingProgress(telemetry) {
+  if (Number.isInteger(telemetry.workerCount) && telemetry.workerCount > 0) {
+    activeWorkerCount = telemetry.workerCount;
+  }
+  if (
+    Number.isInteger(telemetry.hardwareConcurrency) &&
+    telemetry.hardwareConcurrency > 0
+  ) {
+    detectedHardwareConcurrency = telemetry.hardwareConcurrency;
+  }
   const generationPercent = Math.round(telemetry.generationProgress * 100);
   const completedBefore = latestArtifact?.totalSteps ?? 0;
   elements.trainingGenerationProgress.value = telemetry.generationProgress;
@@ -1493,7 +1559,8 @@ function handleTrainingProgress(telemetry) {
   elements.simulationThroughput.textContent =
     `${formatInteger(telemetry.stepsPerSecond)} шагов/с`;
   elements.throughputExplanation.textContent =
-    `${generationPercent}% текущего поколения · ${trainingSpeed === "fast" ? "без паузы между поколениями" : "пауза 120 мс между поколениями"}. Скорость — физические шаги, не replay.`;
+    `${generationPercent}% текущего поколения · ${activeWorkerCount || 1} Workers · ${trainingSpeed === "fast" ? "без паузы между поколениями" : "пауза 120 мс между поколениями"}. Скорость — физические шаги, не replay.`;
+  renderRunningConfiguration();
   elements.metricGeneration.textContent = `${telemetry.generation}…`;
   elements.metricProgress.textContent =
     `${Math.round(telemetry.bestObservedProgress * 100)}%*`;
@@ -1759,6 +1826,9 @@ function finishTraining(message) {
 }
 
 function handleGenerationArtifact(artifact) {
+  activeWorkerCount = artifact.workerCount ?? activeWorkerCount;
+  detectedHardwareConcurrency =
+    artifact.hardwareConcurrency ?? detectedHardwareConcurrency;
   if (
     latestArtifact &&
     latestArtifact.generation !== artifact.generation
@@ -1796,7 +1866,8 @@ function handleGenerationArtifact(artifact) {
   elements.trainingEta.textContent =
     artifact.generation >= targetGeneration ? "готово" : "уточняется…";
   elements.throughputExplanation.textContent =
-    `Поколение ${artifact.generation}: ${formatInteger(artifact.steps)} реальных шагов. Если машины живут дольше, шагов становится больше.`;
+    `Поколение ${artifact.generation}: ${formatInteger(artifact.steps)} шагов на ${activeWorkerCount || 1} Workers. Если машины живут дольше, шагов становится больше.`;
+  renderRunningConfiguration();
   setSimulationMessage(
     `Поколение ${artifact.generation} рассчитано. На экране проигрывается готовый replay; обучение идёт независимо.`,
   );
@@ -1810,7 +1881,19 @@ function ensureTrainingWorker() {
   );
   trainingWorker.addEventListener("message", (event) => {
     const message = event.data ?? {};
-    if (message.type === "progress") {
+    if (message.type === "pool-initializing") {
+      elements.simulationThroughput.textContent = "Запускаем CPU-пул…";
+      elements.throughputExplanation.textContent =
+        "Компилируем трассы в каждом Worker. Это разовая подготовка перед первым поколением.";
+    } else if (message.type === "started") {
+      activeWorkerCount = message.workerCount ?? 1;
+      detectedHardwareConcurrency =
+        message.hardwareConcurrency ?? detectedHardwareConcurrency;
+      renderRunningConfiguration();
+      setSimulationMessage(
+        `Запущено ${activeWorkerCount} вычислительных Workers на ${detectedHardwareConcurrency} логических ядрах.`,
+      );
+    } else if (message.type === "progress") {
       handleTrainingProgress(message.telemetry);
     } else if (message.type === "generation") {
       handleGenerationArtifact(message.artifact);
@@ -1868,6 +1951,7 @@ function startTraining(event) {
         hiddenLayers: [...runConfig.hiddenLayers],
         eliteCount,
         aggregateMode: elements.aggregateMode.value,
+        workerCount: selectedWorkerCount(),
       },
     };
 
@@ -1888,6 +1972,7 @@ function startTraining(event) {
     ensureTrainingWorker();
     trainingRunning = true;
     trainingPaused = false;
+    activeWorkerCount = 0;
     elements.simulationPause.textContent = "Пауза обучения";
     elements.runningTrackName.textContent =
       trackDefinitions.length === 1
@@ -1907,6 +1992,7 @@ function startTraining(event) {
       config: currentRun.config,
       targetGeneration,
       speed: trainingSpeed,
+      workerCount: currentRun.config.workerCount,
     });
   } catch (error) {
     setSimulationMessage(error.message);
@@ -2636,8 +2722,12 @@ for (const input of [
   elements.episodeDuration,
   elements.seed,
 ]) {
-  input?.addEventListener("input", updateBudgetSummary);
+  input?.addEventListener("input", () => {
+    if (input === elements.populationSize) renderWorkerCountOptions();
+    updateBudgetSummary();
+  });
 }
+elements.workerCount.addEventListener("change", renderRunningConfiguration);
 elements.networkPreset.addEventListener("change", () => {
   if (elements.networkPreset.value === "custom") return;
   setNetworkArchitecture(elements.networkPreset.value);
@@ -2775,6 +2865,7 @@ window.addEventListener("resize", () => {
 
 renderTrackLibrary();
 renderNetworkEditor();
+renderWorkerCountOptions();
 fillSimulationTrackSelect();
 updateSimulationMetrics();
 setSimulationRunningUi(false);
