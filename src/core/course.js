@@ -105,46 +105,95 @@ export function createCourse(definition) {
     closed,
   });
 
-  function locate(position) {
+  function routeDistanceDelta(left, right) {
+    const difference = Math.abs(left - right);
+    return closed ? Math.min(difference, totalLength - difference) : difference;
+  }
+
+  function segmentSample(position, segment) {
+    const relativeX = position.x - segment.start.x;
+    const relativeY = position.y - segment.start.y;
+    const dot = relativeX * segment.dx + relativeY * segment.dy;
+    const t = clamp(dot / (segment.length * segment.length), 0, 1);
+    const x = segment.start.x + segment.dx * t;
+    const y = segment.start.y + segment.dy * t;
+    const squaredDistance = (position.x - x) ** 2 + (position.y - y) ** 2;
+    const elevation =
+      segment.start.elevation +
+      (segment.end.elevation - segment.start.elevation) * t;
+    const startWidth = segment.start.width ?? width;
+    const endWidth = segment.end.width ?? width;
+    const roadWidth = startWidth + (endWidth - startWidth) * t;
+    const distanceAlong = segment.startDistance + segment.length * t;
+
+    return {
+      x,
+      y,
+      elevation,
+      segmentIndex: segment.index,
+      segmentT: t,
+      distanceFromCenter: Math.sqrt(squaredDistance),
+      squaredDistance,
+      distanceAlong,
+      progress: distanceAlong / totalLength,
+      heading: Math.atan2(segment.dy, segment.dx),
+      grade: (segment.end.elevation - segment.start.elevation) / segment.length,
+      roadWidth,
+    };
+  }
+
+  function routeConstraint(options = {}) {
+    if (options?.referenceDistanceAlong == null) return null;
+    const referenceDistanceAlong = Number(options.referenceDistanceAlong);
+    const maxRouteDistance = Number(
+      options.maxRouteDistance ?? Math.max(64, width * 1.5),
+    );
+    if (!Number.isFinite(referenceDistanceAlong)) {
+      throw new TypeError("Route reference distance must be finite.");
+    }
+    if (!Number.isFinite(maxRouteDistance) || maxRouteDistance <= 0) {
+      throw new RangeError("Maximum route distance must be positive.");
+    }
+    return { referenceDistanceAlong, maxRouteDistance };
+  }
+
+  function locate(position, options = {}) {
+    const constraint = routeConstraint(options);
     let nearest = null;
+    let nearestUnrestricted = null;
+    let onConstrainedSurface = false;
 
     for (const segment of segments) {
-      const relativeX = position.x - segment.start.x;
-      const relativeY = position.y - segment.start.y;
-      const dot = relativeX * segment.dx + relativeY * segment.dy;
-      const t = clamp(dot / (segment.length * segment.length), 0, 1);
-      const x = segment.start.x + segment.dx * t;
-      const y = segment.start.y + segment.dy * t;
-      const squaredDistance = (position.x - x) ** 2 + (position.y - y) ** 2;
-
-      if (!nearest || squaredDistance < nearest.squaredDistance) {
-        const elevation =
-          segment.start.elevation +
-          (segment.end.elevation - segment.start.elevation) * t;
-        const startWidth = segment.start.width ?? width;
-        const endWidth = segment.end.width ?? width;
-        const roadWidth = startWidth + (endWidth - startWidth) * t;
-        const distanceAlong = segment.startDistance + segment.length * t;
-        nearest = {
-          x,
-          y,
-          elevation,
-          segmentIndex: segment.index,
-          segmentT: t,
-          distanceFromCenter: Math.sqrt(squaredDistance),
-          squaredDistance,
-          distanceAlong,
-          progress: distanceAlong / totalLength,
-          heading: Math.atan2(segment.dy, segment.dx),
-          grade: (segment.end.elevation - segment.start.elevation) / segment.length,
-          roadWidth,
-        };
+      const sample = segmentSample(position, segment);
+      if (
+        !nearestUnrestricted ||
+        sample.squaredDistance < nearestUnrestricted.squaredDistance
+      ) {
+        nearestUnrestricted = sample;
+      }
+      if (
+        constraint &&
+        routeDistanceDelta(
+          sample.distanceAlong,
+          constraint.referenceDistanceAlong,
+        ) > constraint.maxRouteDistance
+      ) {
+        continue;
+      }
+      if (!nearest || sample.squaredDistance < nearest.squaredDistance) {
+        nearest = sample;
+      }
+      if (sample.distanceFromCenter <= sample.roadWidth / 2 + EPSILON) {
+        onConstrainedSurface = true;
       }
     }
 
+    nearest ??= nearestUnrestricted;
     return {
       ...nearest,
-      onTrack: pointOnRoadSurface(position, roadSurface),
+      onTrack: constraint
+        ? onConstrainedSurface
+        : pointOnRoadSurface(position, roadSurface),
     };
   }
 
@@ -184,12 +233,19 @@ export function createCourse(definition) {
     };
   }
 
-  function raycast(origin, angle, maxDistance, step = 1) {
+  function raycast(origin, angle, maxDistance, step = 1, options = {}) {
     if (maxDistance <= 0 || step <= 0) {
       throw new RangeError("Ray distance and step must be positive.");
     }
 
-    if (!locate(origin).onTrack) {
+    const referenceDistanceAlong =
+      options.referenceDistanceAlong ?? locate(origin).distanceAlong;
+    const routeOptions = {
+      referenceDistanceAlong,
+      maxRouteDistance:
+        options.maxRouteDistance ?? maxDistance + Math.max(width, 32),
+    };
+    if (!locate(origin, routeOptions).onTrack) {
       return 0;
     }
 
@@ -198,7 +254,7 @@ export function createCourse(definition) {
         x: origin.x + Math.cos(angle) * distance,
         y: origin.y + Math.sin(angle) * distance,
       };
-      if (!locate(point).onTrack) {
+      if (!locate(point, routeOptions).onTrack) {
         return clamp(distance / maxDistance, 0, 1);
       }
     }
@@ -206,8 +262,18 @@ export function createCourse(definition) {
     return 1;
   }
 
-  function containsFootprint(footprint) {
-    return footprintPoints(footprint).every((point) => locate(point).onTrack);
+  function containsFootprint(footprint, options = {}) {
+    const referenceDistanceAlong =
+      options.referenceDistanceAlong ?? locate(footprint.position).distanceAlong;
+    const routeOptions = {
+      referenceDistanceAlong,
+      maxRouteDistance:
+        options.maxRouteDistance ??
+        Math.max(width * 1.5, Number(footprint.length) + width, 64),
+    };
+    return footprintPoints(footprint).every(
+      (point) => locate(point, routeOptions).onTrack,
+    );
   }
 
   function toDefinition() {

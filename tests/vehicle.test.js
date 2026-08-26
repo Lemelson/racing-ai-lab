@@ -120,6 +120,40 @@ test("vehicle advances with a fixed timestep and bounded controls", () => {
   );
 });
 
+test("vehicle cannot switch onto a distant branch at a self-crossing", () => {
+  const selfCrossing = createCourse({
+    points: [
+      { x: -120, y: 0 },
+      { x: 120, y: 0 },
+      { x: 120, y: 120 },
+      { x: 0, y: -120 },
+      { x: -120, y: -120 },
+    ],
+    width: 28,
+    closed: false,
+  });
+  const vehicle = createVehicle({
+    course: selfCrossing,
+    position: { x: 60, y: 0 },
+    heading: Math.atan2(-240, -120),
+    initialSpeed: 60,
+    fixedDt: 0.1,
+    maxAcceleration: 0,
+    maxSpeed: 100,
+  });
+
+  let state = vehicle.snapshot();
+  for (let step = 0; step < 8 && state.onTrack; step += 1) {
+    state = vehicle.step({ throttle: 0, brake: 0, steering: 0 });
+  }
+
+  assert.equal(
+    state.onTrack,
+    false,
+    "the route-local barrier must eliminate a car that turns onto the crossing",
+  );
+});
+
 test("vehicle braking reduces speed and steering changes heading deterministically", () => {
   const vehicle = createVehicle({
     course: straight,

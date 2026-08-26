@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   agentPresentation,
   buildFitnessSeries,
+  buildRewardMarkers,
+  buildTrainingTelemetry,
   compactReplayArtifact,
 } from "../src/core/training-analysis.js";
 
@@ -78,4 +80,50 @@ test("older replay artifacts keep summaries and only the top requested agents", 
   assert.equal(compact.trackViews[0].rankedAgents.length, 2);
   assert.deepEqual(compact.trackViews[0].checkpoint, { genes: [1, 2] });
   assert.equal(artifact.rankedAgents.length, 3);
+});
+
+test("reward markers divide a closed course into visible progress checkpoints", () => {
+  const course = {
+    length: 1_000,
+    poseAtDistance(distance) {
+      return {
+        x: distance,
+        y: distance / 2,
+        heading: Math.PI / 4,
+      };
+    },
+  };
+
+  const markers = buildRewardMarkers(course, { interval: 0.1 });
+
+  assert.equal(markers.length, 9);
+  assert.deepEqual(markers[0], {
+    progress: 0.1,
+    distanceAlong: 100,
+    x: 100,
+    y: 50,
+    heading: Math.PI / 4,
+    label: "10%",
+  });
+  assert.equal(markers.at(-1).label, "90%");
+  assert.equal(markers.at(-1).distanceAlong, 900);
+});
+
+test("live telemetry exposes current generation progress, throughput, and ETA", () => {
+  const telemetry = buildTrainingTelemetry({
+    generation: 2,
+    targetGeneration: 10,
+    completedEpisodes: 25,
+    totalEpisodes: 100,
+    completedSteps: 5_000,
+    totalStepBudget: 24_000,
+    elapsedMilliseconds: 2_000,
+  });
+
+  assert.equal(telemetry.generationProgress, 0.25);
+  assert.equal(telemetry.overallProgress, 0.125);
+  assert.equal(telemetry.stepsPerSecond, 2_500);
+  assert.equal(telemetry.estimatedGenerationMilliseconds, 8_000);
+  assert.equal(telemetry.remainingGenerationMilliseconds, 6_000);
+  assert.equal(telemetry.estimatedRunRemainingMilliseconds, 70_000);
 });

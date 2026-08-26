@@ -14,6 +14,7 @@ import { createRunConfig } from "./core/run-config.js";
 import {
   agentPresentation,
   buildFitnessSeries,
+  buildRewardMarkers,
   compactReplayArtifact,
 } from "./core/training-analysis.js";
 import {
@@ -110,6 +111,23 @@ const elements = {
   simulationStop: byId("simulation-stop"),
   simulationMessage: byId("simulation-message"),
   simulationThroughput: byId("simulation-throughput"),
+  throughputExplanation: byId("throughput-explanation"),
+  trainingGenerationProgress: byId("training-generation-progress"),
+  trainingCurrentGeneration: byId("training-current-generation"),
+  trainingEpisodes: byId("training-episodes"),
+  trainingLiveSteps: byId("training-live-steps"),
+  trainingCurrentTrack: byId("training-current-track"),
+  trainingElapsed: byId("training-elapsed"),
+  trainingEta: byId("training-eta"),
+  runningSpeedMode: byId("running-speed-mode"),
+  runningPopulation: byId("running-population"),
+  runningGenerations: byId("running-generations"),
+  runningEpisode: byId("running-episode"),
+  runningNetwork: byId("running-network"),
+  runningEvolution: byId("running-evolution"),
+  runningSeed: byId("running-seed"),
+  runningAggregate: byId("running-aggregate"),
+  runningBudget: byId("running-budget"),
   replayStatus: byId("replay-status"),
   trackViewPanel: byId("track-view-panel"),
   trackViewTabs: byId("track-view-tabs"),
@@ -125,6 +143,7 @@ const elements = {
   populationView: byId("population-view"),
   populationViewPanel: document.querySelector(".population-view-panel"),
   sensorToggle: byId("sensor-toggle"),
+  rewardToggle: byId("reward-toggle"),
   agentCount: byId("agent-count"),
   replayTransport: byId("replay-transport"),
   replayPrevious: byId("replay-previous"),
@@ -191,6 +210,7 @@ let playbackPaused = false;
 let populationView = "best";
 let selectedReplayTrackKey = null;
 let trackWeightsVisible = false;
+let rewardMarkersVisible = false;
 let networkArchitecture = normalizeNetworkArchitecture("baseline");
 let displayedArtifact = null;
 let latestArtifact = null;
@@ -211,6 +231,25 @@ function formatFitness(value) {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   }).format(value ?? 0);
+}
+
+function formatDuration(milliseconds) {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return "считаем…";
+  const seconds = Math.max(1, Math.round(milliseconds / 1_000));
+  if (seconds < 60) return `${seconds} с`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder > 0 ? `${minutes} мин ${remainder} с` : `${minutes} мин`;
+}
+
+function russianPlural(value, one, few, many) {
+  const absolute = Math.abs(Math.trunc(Number(value)));
+  const lastTwo = absolute % 100;
+  const last = absolute % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
 }
 
 function uniqueTrackId() {
@@ -358,6 +397,37 @@ function fillRoadSurface(
   }
 }
 
+function drawSelfCrossingBarriers(
+  context,
+  fragment,
+  defaultWidth,
+  closed,
+) {
+  const surface = buildRoadSurface(fragment, { defaultWidth, closed });
+  for (const crossing of surface.intersections) {
+    const span = crossing.underRadius * 2 + 12;
+    const roadWidth = crossing.overRadius * 2;
+    context.save();
+    context.translate(crossing.x, crossing.y);
+    context.rotate(crossing.overHeading);
+
+    context.fillStyle = "#aeb4bb";
+    context.fillRect(-span / 2, -(roadWidth + 8) / 2, span, roadWidth + 8);
+    context.fillStyle = "#4b5056";
+    context.fillRect(-span / 2, -roadWidth / 2, span, roadWidth);
+
+    context.strokeStyle = "#d8dde3";
+    context.lineWidth = 2.5;
+    context.beginPath();
+    context.moveTo(-span / 2, -roadWidth / 2);
+    context.lineTo(span / 2, -roadWidth / 2);
+    context.moveTo(-span / 2, roadWidth / 2);
+    context.lineTo(span / 2, roadWidth / 2);
+    context.stroke();
+    context.restore();
+  }
+}
+
 function drawRoad(
   context,
   fragments,
@@ -377,6 +447,7 @@ function drawRoad(
     context.globalAlpha = alpha;
     fillRoadSurface(context, fragment, defaultWidth, 6, closed, "#aeb4bb");
     fillRoadSurface(context, fragment, defaultWidth, 0, closed, "#4b5056");
+    drawSelfCrossingBarriers(context, fragment, defaultWidth, closed);
     context.globalAlpha = 1;
 
     if (showEndpoints && !closed && fragment.length > 0) {
@@ -417,6 +488,40 @@ function drawStartLine(context, definition, transform) {
   for (let index = 0; index < cells; index += 1) {
     context.fillStyle = index % 2 === 0 ? "#ffffff" : "#202328";
     context.fillRect(-4, -roadWidth / 2 + index * cellHeight, 8, cellHeight);
+  }
+  context.restore();
+}
+
+function drawRewardMarkers(context, course, transform) {
+  const markers = buildRewardMarkers(course);
+  context.save();
+  context.translate(transform.offsetX, transform.offsetY);
+  context.scale(transform.zoom, transform.zoom);
+  context.font = `${11 / transform.zoom}px -apple-system, sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "bottom";
+  for (const marker of markers) {
+    const pose = course.poseAtDistance(marker.distanceAlong);
+    context.save();
+    context.translate(marker.x, marker.y);
+    context.rotate(marker.heading);
+    context.setLineDash([4 / transform.zoom, 4 / transform.zoom]);
+    context.strokeStyle = "rgb(255 255 255 / 0.9)";
+    context.lineWidth = 2 / transform.zoom;
+    context.beginPath();
+    context.moveTo(0, -pose.roadWidth / 2);
+    context.lineTo(0, pose.roadWidth / 2);
+    context.stroke();
+    context.restore();
+    const normalX = -Math.sin(marker.heading);
+    const normalY = Math.cos(marker.heading);
+    const labelOffset = pose.roadWidth / 2 + 7 / transform.zoom;
+    context.fillStyle = "#1769ff";
+    context.fillText(
+      marker.label,
+      marker.x + normalX * labelOffset,
+      marker.y + normalY * labelOffset,
+    );
   }
   context.restore();
 }
@@ -1335,6 +1440,69 @@ function renderTrackWeightsPanel(artifact = displayedArtifact) {
   }
 }
 
+function renderRunningConfiguration() {
+  const config = currentRun?.config;
+  if (!config) return;
+  elements.runningPopulation.textContent =
+    `${formatInteger(config.populationSize)} машин`;
+  elements.runningGenerations.textContent =
+    `${formatInteger(config.generationLimit)} ${russianPlural(config.generationLimit, "поколение", "поколения", "поколений")}`;
+  elements.runningEpisode.textContent =
+    `${config.episodeDurationSeconds} с · ${formatInteger(config.episodeSteps)} шагов`;
+  elements.runningNetwork.textContent =
+    `${config.topology} · ${formatInteger(config.parameterCount)} ${russianPlural(config.parameterCount, "вес", "веса", "весов")}`;
+  elements.runningEvolution.textContent =
+    `${formatInteger(config.eliteCount)} элиты · mutation ${Math.round(config.mutationRate * 100)}% / ${String(config.mutationScale).replace(".", ",")}`;
+  elements.runningSeed.textContent = String(config.seed);
+  elements.runningAggregate.textContent =
+    `${elements.aggregateMode.selectedOptions[0]?.textContent ?? config.aggregateMode} · ${config.trackCount} ${russianPlural(config.trackCount, "трасса", "трассы", "трасс")}`;
+  elements.runningBudget.textContent =
+    `${formatInteger(config.estimatedSteps)} шагов`;
+  elements.runningSpeedMode.textContent =
+    trainingSpeed === "fast" ? "Максимум · без паузы" : "Обычно · +120 мс";
+}
+
+function resetTrainingTelemetry() {
+  elements.trainingGenerationProgress.value = 0;
+  elements.trainingCurrentGeneration.textContent =
+    `Поколение 1 / ${formatInteger(targetGeneration)}`;
+  elements.trainingEpisodes.textContent = "0 / 0";
+  elements.trainingLiveSteps.textContent = "0";
+  elements.trainingCurrentTrack.textContent = "—";
+  elements.trainingElapsed.textContent = "0 с";
+  elements.trainingEta.textContent = "Считаем…";
+  elements.throughputExplanation.textContent =
+    "Первое обновление появится после первого рассчитанного заезда.";
+}
+
+function handleTrainingProgress(telemetry) {
+  const generationPercent = Math.round(telemetry.generationProgress * 100);
+  const completedBefore = latestArtifact?.totalSteps ?? 0;
+  elements.trainingGenerationProgress.value = telemetry.generationProgress;
+  elements.trainingCurrentGeneration.textContent =
+    `Поколение ${formatInteger(telemetry.generation)} / ${formatInteger(targetGeneration)} · ${generationPercent}%`;
+  elements.trainingEpisodes.textContent =
+    `${formatInteger(telemetry.completedEpisodes)} / ${formatInteger(telemetry.totalEpisodes)}`;
+  elements.trainingLiveSteps.textContent =
+    `${formatInteger(telemetry.completedSteps)} / до ${formatInteger(telemetry.totalStepBudget)}`;
+  elements.trainingCurrentTrack.textContent = telemetry.trackName;
+  elements.trainingElapsed.textContent =
+    formatDuration(telemetry.elapsedMilliseconds);
+  elements.trainingEta.textContent =
+    formatDuration(telemetry.estimatedRunRemainingMilliseconds);
+  elements.simulationThroughput.textContent =
+    `${formatInteger(telemetry.stepsPerSecond)} шагов/с`;
+  elements.throughputExplanation.textContent =
+    `${generationPercent}% текущего поколения · ${trainingSpeed === "fast" ? "без паузы между поколениями" : "пауза 120 мс между поколениями"}. Скорость — физические шаги, не replay.`;
+  elements.metricGeneration.textContent = `${telemetry.generation}…`;
+  elements.metricProgress.textContent =
+    `${Math.round(telemetry.bestObservedProgress * 100)}%*`;
+  elements.metricFitness.textContent =
+    `${formatFitness(telemetry.bestObservedFitness)}*`;
+  elements.metricSteps.textContent =
+    formatInteger(completedBefore + telemetry.completedSteps);
+}
+
 function updateSimulationMetrics(snapshot = null) {
   const selected = selectedTrackArtifact(snapshot);
   elements.metricGeneration.textContent = formatInteger(selected?.generation ?? 0);
@@ -1616,6 +1784,19 @@ function handleGenerationArtifact(artifact) {
   }
   elements.simulationThroughput.textContent =
     `${formatInteger(artifact.stepsPerSecond ?? 0)} шагов/с`;
+  elements.trainingGenerationProgress.value = 1;
+  elements.trainingCurrentGeneration.textContent =
+    `Поколение ${formatInteger(artifact.generation)} / ${formatInteger(targetGeneration)} · готово`;
+  elements.trainingEpisodes.textContent =
+    `${formatInteger(artifact.populationSize * artifact.trackCount)} / ${formatInteger(artifact.populationSize * artifact.trackCount)}`;
+  elements.trainingLiveSteps.textContent =
+    `${formatInteger(artifact.steps)} выполнено`;
+  elements.trainingElapsed.textContent =
+    formatDuration(artifact.computeMilliseconds);
+  elements.trainingEta.textContent =
+    artifact.generation >= targetGeneration ? "готово" : "уточняется…";
+  elements.throughputExplanation.textContent =
+    `Поколение ${artifact.generation}: ${formatInteger(artifact.steps)} реальных шагов. Если машины живут дольше, шагов становится больше.`;
   setSimulationMessage(
     `Поколение ${artifact.generation} рассчитано. На экране проигрывается готовый replay; обучение идёт независимо.`,
   );
@@ -1629,7 +1810,9 @@ function ensureTrainingWorker() {
   );
   trainingWorker.addEventListener("message", (event) => {
     const message = event.data ?? {};
-    if (message.type === "generation") {
+    if (message.type === "progress") {
+      handleTrainingProgress(message.telemetry);
+    } else if (message.type === "generation") {
       handleGenerationArtifact(message.artifact);
     } else if (message.type === "complete") {
       finishTraining("Лимит поколений достигнут. Можно сохранить запуск, посмотреть веса или продолжить.");
@@ -1699,7 +1882,7 @@ function startTraining(event) {
     elements.replayStatus.hidden = true;
     elements.trackViewPanel.hidden = true;
     elements.trackWeightsPanel.hidden = true;
-    elements.populationViewPanel.hidden = true;
+    elements.populationViewPanel.hidden = false;
     elements.replayTransport.hidden = true;
     elements.runResult.hidden = true;
     ensureTrainingWorker();
@@ -1711,9 +1894,13 @@ function startTraining(event) {
         ? trackDefinitions[0].name
         : `${trackDefinitions.length} трасс · ${elements.aggregateMode.selectedOptions[0].textContent}`;
     elements.simulationThroughput.textContent = "Рассчитываем…";
+    resetTrainingTelemetry();
+    renderRunningConfiguration();
     setSimulationRunningUi(true);
     updateSimulationMetrics();
-    setSimulationMessage("Первое поколение считается в отдельном Worker. Экран останется плавным.");
+    setSimulationMessage(
+      "Считается поколение 1. Звёздочкой отмечены предварительные progress и fitness по уже завершённым заездам.",
+    );
     trainingWorker.postMessage({
       type: "start",
       tracks: trackDefinitions,
@@ -2282,6 +2469,9 @@ function drawSimulationFrame(deltaSeconds) {
     transform: simulationViewTransform,
   });
   drawStartLine(context, activeTrackDefinition, simulationViewTransform);
+  if (rewardMarkersVisible) {
+    drawRewardMarkers(context, activeCourse, simulationViewTransform);
+  }
 
   const artifact = selectedTrackArtifact(displayedArtifact);
   if (!artifact?.replay?.length) return;
@@ -2508,6 +2698,14 @@ elements.trackWeightsToggle.addEventListener("click", () => {
   trackWeightsVisible = !trackWeightsVisible;
   renderTrackWeightsPanel();
 });
+elements.rewardToggle.addEventListener("change", () => {
+  rewardMarkersVisible = elements.rewardToggle.checked;
+  showToast(
+    rewardMarkersVisible
+      ? "Показаны отметки каждых 10% трассы. Реальная награда начисляется непрерывно за новую дистанцию."
+      : "Отметки награды скрыты.",
+  );
+});
 elements.trackWeightsDetails.addEventListener("click", () =>
   showWeightsDialog(selectedTrackArtifact()),
 );
@@ -2530,6 +2728,11 @@ document.querySelectorAll("[data-speed]").forEach((button) => {
       type: "speed",
       value: trainingSpeed,
     });
+    renderRunningConfiguration();
+    elements.throughputExplanation.textContent =
+      trainingSpeed === "fast"
+        ? "Максимум: паузы между поколениями нет; физика и объём расчёта не меняются."
+        : "Обычно: между поколениями есть пауза 120 мс для более спокойной нагрузки.";
   });
 });
 

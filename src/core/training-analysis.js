@@ -62,6 +62,93 @@ export function buildFitnessSeries(artifacts, trackKey = null) {
     .sort((left, right) => left.generation - right.generation);
 }
 
+export function buildRewardMarkers(course, { interval = 0.1 } = {}) {
+  if (
+    !course ||
+    !Number.isFinite(course.length) ||
+    course.length <= 0 ||
+    typeof course.poseAtDistance !== "function"
+  ) {
+    throw new TypeError("Reward markers need a compiled course.");
+  }
+  if (!Number.isFinite(interval) || interval <= 0 || interval >= 1) {
+    throw new RangeError("Reward marker interval must be between zero and one.");
+  }
+  const markers = [];
+  for (let progress = interval; progress < 1 - 1e-9; progress += interval) {
+    const normalizedProgress = Number(progress.toFixed(10));
+    const distanceAlong = course.length * normalizedProgress;
+    const pose = course.poseAtDistance(distanceAlong);
+    markers.push({
+      progress: normalizedProgress,
+      distanceAlong,
+      x: pose.x,
+      y: pose.y,
+      heading: pose.heading,
+      label: `${Math.round(normalizedProgress * 100)}%`,
+    });
+  }
+  return markers;
+}
+
+export function buildTrainingTelemetry(source) {
+  const generation = Number(source?.generation);
+  const targetGeneration = Number(source?.targetGeneration);
+  const completedEpisodes = Number(source?.completedEpisodes);
+  const totalEpisodes = Number(source?.totalEpisodes);
+  const completedSteps = Number(source?.completedSteps);
+  const totalStepBudget = Number(source?.totalStepBudget);
+  const elapsedMilliseconds = Number(source?.elapsedMilliseconds);
+  if (
+    !Number.isInteger(generation) ||
+    generation < 1 ||
+    !Number.isInteger(targetGeneration) ||
+    targetGeneration < generation ||
+    !Number.isInteger(completedEpisodes) ||
+    completedEpisodes < 0 ||
+    !Number.isInteger(totalEpisodes) ||
+    totalEpisodes < 1 ||
+    completedEpisodes > totalEpisodes ||
+    !Number.isInteger(completedSteps) ||
+    completedSteps < 0 ||
+    !Number.isInteger(totalStepBudget) ||
+    totalStepBudget < completedSteps ||
+    !Number.isFinite(elapsedMilliseconds) ||
+    elapsedMilliseconds < 0
+  ) {
+    throw new RangeError("Training telemetry values are inconsistent.");
+  }
+  const generationProgress = Math.max(
+    completedEpisodes / totalEpisodes,
+    completedSteps / totalStepBudget,
+  );
+  const overallProgress =
+    (generation - 1 + generationProgress) / targetGeneration;
+  const stepsPerSecond =
+    elapsedMilliseconds > 0
+      ? Math.round((completedSteps * 1_000) / elapsedMilliseconds)
+      : 0;
+  const estimatedGenerationMilliseconds =
+    generationProgress > 0
+      ? elapsedMilliseconds / generationProgress
+      : 0;
+  const remainingGenerationMilliseconds = Math.max(
+    0,
+    estimatedGenerationMilliseconds - elapsedMilliseconds,
+  );
+  const remainingFullGenerations = targetGeneration - generation;
+  return {
+    generationProgress,
+    overallProgress,
+    stepsPerSecond,
+    estimatedGenerationMilliseconds,
+    remainingGenerationMilliseconds,
+    estimatedRunRemainingMilliseconds:
+      remainingGenerationMilliseconds +
+      remainingFullGenerations * estimatedGenerationMilliseconds,
+  };
+}
+
 export function compactReplayArtifact(
   artifact,
   { agentLimit = 5 } = {},

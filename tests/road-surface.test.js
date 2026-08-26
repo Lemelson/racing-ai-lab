@@ -47,3 +47,32 @@ test("variable-width road primitives preserve the local width at every join", ()
   assert.equal(pointOnRoadSurface({ x: 147, y: 0 }, surface), true);
   assert.equal(pointOnRoadSurface({ x: 153, y: 0 }, surface), false);
 });
+
+test("distant route segments expose a grade-separated self-crossing", () => {
+  const surface = buildRoadSurface(
+    [
+      { x: -120, y: 0 },
+      { x: 120, y: 0 },
+      { x: 120, y: 120 },
+      { x: 0, y: -120 },
+      { x: -120, y: -120 },
+    ],
+    { defaultWidth: 28, closed: false },
+  );
+
+  assert.equal(surface.intersections.length, 1);
+  assert.deepEqual(
+    {
+      x: surface.intersections[0].x,
+      y: surface.intersections[0].y,
+      underSegmentIndex: surface.intersections[0].underSegmentIndex,
+      overSegmentIndex: surface.intersections[0].overSegmentIndex,
+    },
+    {
+      x: 60,
+      y: 0,
+      underSegmentIndex: 0,
+      overSegmentIndex: 2,
+    },
+  );
+});

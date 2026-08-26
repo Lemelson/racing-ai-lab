@@ -211,3 +211,46 @@ test("training exposes a configurable-network champion checkpoint", () => {
   assert.equal(snapshot.manifest.topology, "8->16->8->3");
   assert.equal(snapshot.manifest.parameterCount, 307);
 });
+
+test("a long generation reports monotonic episode progress before it completes", () => {
+  const lane = createTrainingLane({
+    tracks: [
+      { key: "track:a", name: "A", course: trainingCourse },
+      { key: "track:b", name: "B", course: trainingCourse },
+    ],
+    config: {
+      ...laneConfig,
+      populationSize: 6,
+      episodeSteps: 12,
+    },
+  });
+  const progress = [];
+
+  const result = lane.trainGeneration({
+    onProgress(update) {
+      progress.push(update);
+    },
+  });
+
+  assert.ok(progress.length > 12);
+  assert.equal(progress[0].completedEpisodes, 0);
+  assert.ok(progress[0].completedSteps > 0);
+  assert.ok(progress[0].completedSteps < result.steps);
+  assert.deepEqual(
+    progress
+      .filter((update) => update.episodeComplete)
+      .map((update) => update.completedEpisodes),
+    Array.from({ length: 12 }, (_, index) => index + 1),
+  );
+  assert.ok(progress.every((update) => update.generation === 1));
+  assert.ok(progress.every((update) => update.totalEpisodes === 12));
+  assert.ok(progress.every((update) => Number.isFinite(update.bestObservedFitness)));
+  assert.ok(progress.every((update) => Number.isFinite(update.bestObservedProgress)));
+  assert.ok(
+    progress.every(
+      (update, index) =>
+        index === 0 || update.completedSteps >= progress[index - 1].completedSteps,
+    ),
+  );
+  assert.equal(progress.at(-1).completedSteps, result.steps);
+});

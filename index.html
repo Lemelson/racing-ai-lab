@@ -328,6 +328,10 @@
                       <input id="sensor-toggle" type="checkbox" checked />
                       <span>Сенсоры</span>
                     </label>
+                    <label class="sensor-toggle-control reward-toggle-control">
+                      <input id="reward-toggle" type="checkbox" />
+                      <span>Награды</span>
+                    </label>
                     <output id="agent-count" class="agent-count">0 агентов</output>
                     <div class="agent-legend" aria-label="Цвета агентов">
                       <span><i class="is-followed"></i>Лидер</span>
@@ -686,7 +690,89 @@
               <section class="throughput-card" aria-label="Скорость обучения">
                 <span>Производительность</span>
                 <strong id="simulation-throughput">— шагов/с</strong>
-                <small>Обучение и просмотр повтора работают независимо.</small>
+                <small id="throughput-explanation">
+                  Скорость появится во время расчёта первого поколения.
+                </small>
+                <progress
+                  id="training-generation-progress"
+                  max="1"
+                  value="0"
+                  aria-label="Прогресс текущего поколения"
+                ></progress>
+                <dl class="training-live-stats">
+                  <div>
+                    <dt>Считается</dt>
+                    <dd id="training-current-generation">Поколение 1 / 50</dd>
+                  </div>
+                  <div>
+                    <dt>Заезды</dt>
+                    <dd id="training-episodes">0 / 0</dd>
+                  </div>
+                  <div>
+                    <dt>Шаги поколения</dt>
+                    <dd id="training-live-steps">0</dd>
+                  </div>
+                  <div>
+                    <dt>Текущая трасса</dt>
+                    <dd id="training-current-track">—</dd>
+                  </div>
+                  <div>
+                    <dt>Прошло</dt>
+                    <dd id="training-elapsed">0 с</dd>
+                  </div>
+                  <div>
+                    <dt>Оценка до конца</dt>
+                    <dd id="training-eta">Считаем…</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section class="running-config-card" aria-labelledby="running-config-heading">
+                <div class="running-config-heading">
+                  <h2 id="running-config-heading">Параметры запуска</h2>
+                  <span id="running-speed-mode">Обычно</span>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Популяция</dt>
+                    <dd id="running-population">40 машин</dd>
+                  </div>
+                  <div>
+                    <dt>Поколения</dt>
+                    <dd id="running-generations">50</dd>
+                  </div>
+                  <div>
+                    <dt>Один заезд</dt>
+                    <dd id="running-episode">8 с · 240 шагов</dd>
+                  </div>
+                  <div>
+                    <dt>Сеть</dt>
+                    <dd id="running-network">8→10→3 · 123 веса</dd>
+                  </div>
+                  <div>
+                    <dt>Эволюция</dt>
+                    <dd id="running-evolution">4 элиты · mutation 14% / 0,2</dd>
+                  </div>
+                  <div>
+                    <dt>Seed</dt>
+                    <dd id="running-seed">20260826</dd>
+                  </div>
+                  <div class="is-wide">
+                    <dt>Оценка на трассах</dt>
+                    <dd id="running-aggregate">Сбалансированно · 1 трасса</dd>
+                  </div>
+                  <div class="is-wide">
+                    <dt>Полный верхний лимит</dt>
+                    <dd id="running-budget">480 000 шагов</dd>
+                  </div>
+                  <div class="is-wide">
+                    <dt>Формула fitness</dt>
+                    <dd>
+                      Δdistance × (1 + speed × 0,015) − 18 за столкновение.
+                      Повторный и обратный путь награды не дают.
+                    </dd>
+                  </div>
+                </dl>
               </section>
 
               <button class="button button-primary" id="simulation-pause" type="button">
@@ -699,9 +785,19 @@
               <fieldset class="speed-control">
                 <legend>Скорость обучения</legend>
                 <div>
-                  <button type="button" data-speed="normal" class="is-active">Обычно</button>
-                  <button type="button" data-speed="fast">Максимум</button>
+                  <button type="button" data-speed="normal" class="is-active">
+                    Обычно
+                    <small>пауза 120 мс</small>
+                  </button>
+                  <button type="button" data-speed="fast">
+                    Максимум
+                    <small>без паузы</small>
+                  </button>
                 </div>
+                <p id="speed-explanation">
+                  Оба режима считают одинаковую физику. «Максимум» только убирает
+                  паузу между поколениями.
+                </p>
               </fieldset>
             </div>
 

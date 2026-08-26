@@ -68,6 +68,7 @@ function cloneSnapshot(state) {
     speed: state.speed,
     grade: state.grade,
     onTrack: state.onTrack,
+    distanceAlong: state.distanceAlong,
     time: state.time,
     throttle: state.throttle,
     brake: state.brake,
@@ -75,16 +76,24 @@ function cloneSnapshot(state) {
   });
 }
 
-function courseSample(course, position) {
+function courseSample(course, position, referenceDistanceAlong) {
   if (!course) {
-    return { grade: 0, elevation: position.elevation, onTrack: true };
+    return {
+      grade: 0,
+      elevation: position.elevation,
+      onTrack: true,
+      distanceAlong: undefined,
+    };
   }
 
   if (typeof course.locate !== "function") {
     throw new TypeError("Vehicle course must expose locate(position).");
   }
 
-  const sample = course.locate(position);
+  const sample = course.locate(
+    position,
+    referenceDistanceAlong == null ? undefined : { referenceDistanceAlong },
+  );
   const grade = finiteNumber(sample?.grade ?? 0, "Course grade");
   const elevation = finiteNumber(
     sample?.elevation ?? position.elevation,
@@ -96,6 +105,7 @@ function courseSample(course, position) {
     elevation,
     onTrack: sample?.onTrack !== false,
     heading: sample?.heading,
+    distanceAlong: sample?.distanceAlong,
   };
 }
 
@@ -176,6 +186,7 @@ export function createVehicle(options = {}) {
     speed: initialSpeed,
     grade: initialSample.grade,
     onTrack: initialSample.onTrack,
+    distanceAlong: initialSample.distanceAlong,
     time: 0,
     throttle: 0,
     brake: 0,
@@ -189,7 +200,11 @@ export function createVehicle(options = {}) {
     }
 
     const controls = readAction(action);
-    const sampleBefore = courseSample(course, state.position);
+    const sampleBefore = courseSample(
+      course,
+      state.position,
+      state.distanceAlong,
+    );
     const headingForGrade =
       typeof sampleBefore.heading === "number" &&
       Number.isFinite(sampleBefore.heading)
@@ -223,7 +238,11 @@ export function createVehicle(options = {}) {
       y: state.position.y + Math.sin(nextHeading) * travelDistance,
       elevation: state.position.elevation,
     };
-    const sampleAfter = courseSample(course, nextPosition);
+    const sampleAfter = courseSample(
+      course,
+      nextPosition,
+      state.distanceAlong,
+    );
 
     nextPosition.elevation = sampleAfter.elevation;
     state.position = nextPosition;
@@ -231,6 +250,9 @@ export function createVehicle(options = {}) {
     state.speed = nextSpeed;
     state.grade = sampleAfter.grade;
     state.onTrack = sampleAfter.onTrack;
+    if (sampleAfter.onTrack) {
+      state.distanceAlong = sampleAfter.distanceAlong;
+    }
     state.time += fixedDt;
     state.throttle = controls.throttle;
     state.brake = controls.brake;

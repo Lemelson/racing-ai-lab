@@ -138,3 +138,53 @@ test("collision and renderer share the same variable-width road union", () => {
     }
   }
 });
+
+test("a distant self-crossing branch does not become a route shortcut", () => {
+  const course = createCourse({
+    points: [
+      { x: -120, y: 0 },
+      { x: 120, y: 0 },
+      { x: 120, y: 120 },
+      { x: 0, y: -120 },
+      { x: -120, y: -120 },
+    ],
+    width: 28,
+    closed: false,
+  });
+  const firstBranch = course.locate({ x: 60, y: 0 });
+  const laterBranch = course.locate(
+    { x: 45, y: -30 },
+    { referenceDistanceAlong: firstBranch.distanceAlong },
+  );
+
+  assert.equal(firstBranch.segmentIndex, 0);
+  assert.equal(
+    laterBranch.onTrack,
+    false,
+    "the remote crossing branch must be separated from the current route",
+  );
+  assert.equal(
+    course.containsFootprint(
+      {
+        position: { x: 45, y: -30 },
+        heading: Math.atan2(-240, -120),
+        width: 8,
+        length: 12,
+      },
+      { referenceDistanceAlong: firstBranch.distanceAlong },
+    ),
+    false,
+    "a car must not turn from the current branch onto the later crossing branch",
+  );
+
+  const laterBranchDistance = course.locate({ x: 45, y: -30 }).distanceAlong;
+  const samePointOnItsOwnBranch = course.locate(
+    { x: 45, y: -30 },
+    { referenceDistanceAlong: laterBranchDistance },
+  );
+  assert.equal(
+    samePointOnItsOwnBranch.onTrack,
+    true,
+    "the crossing branch must remain drivable when reached in route order",
+  );
+});

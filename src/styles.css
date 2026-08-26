@@ -845,7 +845,7 @@ input[type="range"] {
 
 .population-view-panel {
   display: grid;
-  grid-template-columns: auto auto auto;
+  grid-template-columns: auto auto auto auto;
   min-height: 52px;
   align-items: center;
   gap: 9px;
@@ -1688,6 +1688,110 @@ input[type="range"] {
   background: var(--blue-soft);
 }
 
+.throughput-card progress {
+  width: 100%;
+  height: 8px;
+  margin-block: 8px 5px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(23 105 255 / 0.14);
+  accent-color: var(--blue);
+}
+
+.throughput-card progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: rgb(23 105 255 / 0.14);
+}
+
+.throughput-card progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--blue);
+}
+
+.training-live-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  margin: 6px 0 0;
+  padding-block-start: 10px;
+  border-block-start: 1px solid rgb(23 105 255 / 0.16);
+}
+
+.training-live-stats div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.training-live-stats dt {
+  color: #5c7294;
+  font-size: 10px;
+}
+
+.training-live-stats dd {
+  overflow: hidden;
+  margin: 0;
+  color: #16335f;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.running-config-card {
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+}
+
+.running-config-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-end: 10px;
+}
+
+.running-config-heading h2 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.running-config-heading span {
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.running-config-card > dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px 14px;
+  margin: 0;
+}
+
+.running-config-card > dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.running-config-card > dl .is-wide {
+  grid-column: 1 / -1;
+}
+
+.running-config-card dt {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.running-config-card dd {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .throughput-card span {
   color: #3e5f92;
   font-size: 11px;
@@ -1731,9 +1835,19 @@ input[type="range"] {
 }
 
 .speed-control button {
+  display: grid;
   min-height: 42px;
+  place-content: center;
+  gap: 2px;
   border: 0;
   background: var(--surface);
+}
+
+.speed-control button small {
+  color: inherit;
+  font-size: 9px;
+  font-weight: 450;
+  opacity: 0.72;
 }
 
 .speed-control button + button {
@@ -1743,6 +1857,13 @@ input[type="range"] {
 .speed-control button.is-active {
   background: var(--blue);
   color: #fff;
+}
+
+.speed-control p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .simulation-message {

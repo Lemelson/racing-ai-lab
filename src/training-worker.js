@@ -1,4 +1,8 @@
 import { createTrainingLaneFromStartPayload } from "./core/training-worker-contract.js";
+import {
+  buildTrainingTelemetry,
+  compactReplayArtifact,
+} from "./core/training-analysis.js";
 
 let lane = null;
 let running = false;
@@ -24,14 +28,39 @@ function trainNext(token) {
   if (!running || paused || token !== runToken || !lane) return;
   try {
     const startedAt = performance.now();
-    const result = lane.trainGeneration();
+    let lastProgressSentAt = -Infinity;
+    const result = lane.trainGeneration({
+      onProgress(progress) {
+        const now = performance.now();
+        const isBoundary =
+          progress.completedSteps === 1 ||
+          (progress.episodeComplete &&
+            (progress.completedEpisodes === 1 ||
+              progress.completedEpisodes === progress.totalEpisodes));
+        if (!isBoundary && now - lastProgressSentAt < 100) return;
+        lastProgressSentAt = now;
+        const elapsedMilliseconds = now - startedAt;
+        send("progress", {
+          telemetry: {
+            ...progress,
+            elapsedMilliseconds,
+            ...buildTrainingTelemetry({
+              ...progress,
+              targetGeneration,
+              elapsedMilliseconds,
+            }),
+          },
+        });
+      },
+    });
     const computeMilliseconds = performance.now() - startedAt;
     const stepsPerSecond =
       computeMilliseconds > 0
         ? Math.round((result.steps * 1000) / computeMilliseconds)
         : 0;
+    const compactArtifact = compactReplayArtifact(result, { agentLimit: 10 });
     lastResult = {
-      ...result,
+      ...compactArtifact,
       computeMilliseconds,
       stepsPerSecond,
     };
@@ -39,7 +68,7 @@ function trainNext(token) {
 
     if (result.generation >= targetGeneration) {
       running = false;
-      send("complete", { artifact: lastResult });
+      send("complete");
       return;
     }
     schedule(token);
@@ -63,7 +92,7 @@ self.addEventListener("message", (event) => {
       running = true;
       paused = false;
       lastResult = null;
-      send("started", { targetGeneration });
+      send("started", { targetGeneration, speed });
       schedule(runToken);
     } catch (error) {
       lane = null;
@@ -116,6 +145,6 @@ self.addEventListener("message", (event) => {
     running = false;
     paused = false;
     runToken += 1;
-    send("stopped", { artifact: lastResult });
+    send("stopped");
   }
 });

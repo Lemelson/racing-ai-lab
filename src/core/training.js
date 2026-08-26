@@ -46,6 +46,7 @@ function evaluateGenome({
   episodeSteps,
   sensors,
   hiddenLayers,
+  onStep,
 }) {
   const start = course.poseAtDistance(Math.min(4, course.length * 0.01));
   const maxSpeed = 150;
@@ -84,12 +85,16 @@ function evaluateGenome({
     const observation = [...rayDistances, before.speed / maxSpeed];
     const action = normalizedAction(network, observation);
     const state = vehicle.step(action);
-    const location = course.locate(state.position);
+    const routeOptions =
+      before.distanceAlong == null
+        ? undefined
+        : { referenceDistanceAlong: before.distanceAlong };
+    const location = course.locate(state.position, routeOptions);
     const onTrack = course.containsFootprint({
       position: state.position,
       heading: state.heading,
       ...VEHICLE_SPEC,
-    });
+    }, routeOptions);
     const collisionThisStep = !onTrack && !collided;
     collided ||= !onTrack;
     const fitness = tracker.update({
@@ -115,6 +120,19 @@ function evaluateGenome({
       score: fitness.score,
       eliminated: !onTrack,
     });
+    if (
+      onStep &&
+      (stepsExecuted === 1 ||
+        stepsExecuted % 30 === 0 ||
+        stepsExecuted === episodeSteps ||
+        !onTrack)
+    ) {
+      onStep({
+        stepsExecuted,
+        score: fitness.score,
+        maxProgress,
+      });
+    }
     if (!onTrack) break;
   }
 
@@ -224,19 +242,71 @@ export function createTrainingLane({ course, tracks, config }) {
   let totalSteps = 0;
   let lastResult = null;
 
-  function trainGeneration() {
+  function trainGeneration(options = {}) {
+    const onProgress =
+      typeof options.onProgress === "function" ? options.onProgress : null;
     const orderedTracks = shuffledTracks(normalizedTracks, orderRng);
+    const totalEpisodes = populationSize * orderedTracks.length;
+    const totalStepBudget = totalEpisodes * episodeSteps;
+    let completedEpisodes = 0;
+    let completedSteps = 0;
+    let bestObservedFitness = 0;
+    let bestObservedProgress = 0;
     const evaluated = population.map((genome, populationIndex) => {
-      const episodes = orderedTracks.map((track) => ({
-        track,
-        episode: evaluateGenome({
+      const episodes = orderedTracks.map((track) => {
+        const episode = evaluateGenome({
           course: track.course,
           genome,
           episodeSteps,
           sensors: track.sensors,
           hiddenLayers: evolution.network.hiddenLayers,
-        }),
-      }));
+          onStep(update) {
+            onProgress?.({
+              generation: generation + 1,
+              completedEpisodes,
+              totalEpisodes,
+              completedSteps: completedSteps + update.stepsExecuted,
+              totalStepBudget,
+              bestObservedFitness: Math.max(
+                bestObservedFitness,
+                (update.score / track.course.length) * 100,
+              ),
+              bestObservedProgress: Math.max(
+                bestObservedProgress,
+                update.maxProgress,
+              ),
+              populationIndex,
+              trackKey: track.key,
+              trackName: track.name,
+              episodeComplete: false,
+            });
+          },
+        });
+        completedEpisodes += 1;
+        completedSteps += episode.stepsExecuted;
+        bestObservedFitness = Math.max(
+          bestObservedFitness,
+          (episode.fitness / track.course.length) * 100,
+        );
+        bestObservedProgress = Math.max(
+          bestObservedProgress,
+          episode.maxProgress,
+        );
+        onProgress?.({
+          generation: generation + 1,
+          completedEpisodes,
+          totalEpisodes,
+          completedSteps,
+          totalStepBudget,
+          bestObservedFitness,
+          bestObservedProgress,
+          populationIndex,
+          trackKey: track.key,
+          trackName: track.name,
+          episodeComplete: true,
+        });
+        return { track, episode };
+      });
       const normalizedScores = episodes.map(
         ({ track, episode }) =>
           (episode.fitness / track.course.length) * 100,
@@ -387,16 +457,7 @@ export function createTrainingLane({ course, tracks, config }) {
       },
     );
     generation += 1;
-    const steps = evaluated.reduce(
-      (generationTotal, entry) =>
-        generationTotal +
-        entry.episodes.reduce(
-          (genomeTotal, { episode }) =>
-            genomeTotal + episode.stepsExecuted,
-          0,
-        ),
-      0,
-    );
+    const steps = completedSteps;
     totalSteps += steps;
     const progressValues = bestTrackResults.map((result) => result.maxProgress);
     lastResult = {

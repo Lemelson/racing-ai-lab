@@ -73,8 +73,12 @@ function readVehiclePose(vehicle) {
     vehicle?.heading ?? candidate.heading ?? 0,
     "Vehicle heading",
   );
+  const referenceDistanceAlong =
+    vehicle?.distanceAlong == null
+      ? undefined
+      : finiteNumber(vehicle.distanceAlong, "Vehicle route distance");
 
-  return { x, y, heading };
+  return { x, y, heading, referenceDistanceAlong };
 }
 
 function normalizedReading(value, index) {
@@ -142,6 +146,9 @@ export function createRaySensors(options = {}) {
           worldAngle,
           ray.maxDistance,
           ray.step,
+          pose.referenceDistanceAlong == null
+            ? undefined
+            : { referenceDistanceAlong: pose.referenceDistanceAlong },
         );
 
         return normalizedReading(reading, index);

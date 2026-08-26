@@ -30,7 +30,7 @@ function readPoint(source, index, defaultWidth, extraWidth) {
   return Object.freeze({ x, y, width, radius });
 }
 
-function segmentPrimitive(start, end) {
+function segmentPrimitive(start, end, index) {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const length = Math.hypot(dx, dy);
@@ -58,6 +58,7 @@ function segmentPrimitive(start, end) {
   ]);
 
   return Object.freeze({
+    index,
     start,
     end,
     dx,
@@ -67,6 +68,61 @@ function segmentPrimitive(start, end) {
     endRadius: end.radius,
     polygon,
   });
+}
+
+function cross(leftX, leftY, rightX, rightY) {
+  return leftX * rightY - leftY * rightX;
+}
+
+function segmentIntersection(under, over) {
+  const denominator = cross(under.dx, under.dy, over.dx, over.dy);
+  if (Math.abs(denominator) <= EPSILON) return null;
+
+  const offsetX = over.start.x - under.start.x;
+  const offsetY = over.start.y - under.start.y;
+  const underT = cross(offsetX, offsetY, over.dx, over.dy) / denominator;
+  const overT = cross(offsetX, offsetY, under.dx, under.dy) / denominator;
+  if (
+    underT <= EPSILON ||
+    underT >= 1 - EPSILON ||
+    overT <= EPSILON ||
+    overT >= 1 - EPSILON
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    x: under.start.x + under.dx * underT,
+    y: under.start.y + under.dy * underT,
+    underSegmentIndex: under.index,
+    overSegmentIndex: over.index,
+    underRadius:
+      under.startRadius +
+      (under.endRadius - under.startRadius) * underT,
+    overRadius:
+      over.startRadius +
+      (over.endRadius - over.startRadius) * overT,
+    overHeading: Math.atan2(over.dy, over.dx),
+  });
+}
+
+function selfIntersections(segments, closed) {
+  const intersections = [];
+  for (let left = 0; left < segments.length; left += 1) {
+    for (let right = left + 1; right < segments.length; right += 1) {
+      const under = segments[left];
+      const over = segments[right];
+      const adjacent =
+        Math.abs(under.index - over.index) <= 1 ||
+        (closed &&
+          under.index === 0 &&
+          over.index === segments.length - 1);
+      if (adjacent) continue;
+      const intersection = segmentIntersection(under, over);
+      if (intersection) intersections.push(intersection);
+    }
+  }
+  return Object.freeze(intersections);
 }
 
 /**
@@ -96,6 +152,7 @@ export function buildRoadSurface(
     const segment = segmentPrimitive(
       points[index],
       points[(index + 1) % points.length],
+      index,
     );
     if (segment) segments.push(segment);
   }
@@ -112,6 +169,7 @@ export function buildRoadSurface(
     closed: Boolean(closed),
     segments: Object.freeze(segments),
     joins: Object.freeze(joins),
+    intersections: selfIntersections(segments, Boolean(closed)),
   });
 }
 
