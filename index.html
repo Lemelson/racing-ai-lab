@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta
+      name="description"
+      content="Локальный редактор трасс и 2D-симулятор эволюционного вождения."
+    />
+    <title>Трассы · Racing AI</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">К содержанию</a>
+
+    <header class="app-header" id="app-header">
+      <a class="brand" href="#tracks" translate="no">Racing <span>AI</span></a>
+      <nav class="primary-nav" aria-label="Основная навигация">
+        <a href="#tracks" data-nav-view="tracks">Трассы</a>
+        <a href="#simulation" data-nav-view="simulation">Симуляция</a>
+      </nav>
+
+      <div class="editor-header-controls" id="editor-header-controls" hidden>
+        <label class="track-name-control">
+          <span class="sr-only">Название трассы</span>
+          <input id="editor-track-name" value="Моя трасса" autocomplete="off" />
+        </label>
+
+        <p class="draft-status" id="editor-draft-status">
+          <span aria-hidden="true"></span>
+          Черновик — прогресс не рассчитывается
+        </p>
+
+        <div class="header-tool-group" aria-label="История изменений">
+          <button
+            class="icon-button"
+            id="editor-undo"
+            type="button"
+            aria-label="Отменить"
+            title="Отменить"
+          >
+            ↶
+          </button>
+          <button
+            class="icon-button"
+            id="editor-redo"
+            type="button"
+            aria-label="Повторить"
+            title="Повторить"
+          >
+            ↷
+          </button>
+        </div>
+
+        <div class="header-tool-group zoom-controls" aria-label="Масштаб">
+          <button
+            class="icon-button"
+            id="editor-zoom-out"
+            type="button"
+            aria-label="Уменьшить"
+          >
+            −
+          </button>
+          <output id="editor-zoom-output">100%</output>
+          <button
+            class="icon-button"
+            id="editor-zoom-in"
+            type="button"
+            aria-label="Увеличить"
+          >
+            +
+          </button>
+        </div>
+
+        <button class="button button-secondary" id="editor-fit" type="button">
+          Показать всю трассу
+        </button>
+        <button
+          class="icon-button"
+          id="editor-fullscreen"
+          type="button"
+          aria-label="Открыть редактор на весь экран"
+          title="На весь экран"
+        >
+          ⛶
+        </button>
+        <button class="button button-primary" id="editor-finish" type="button">
+          Завершить и сохранить
+        </button>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <section class="view tracks-view" id="tracks-view" data-view="tracks">
+        <div class="page-container">
+          <header class="page-heading">
+            <div>
+              <h1>Трассы</h1>
+              <p>Создавайте трассы и выбирайте, на какой запускать обучение.</p>
+            </div>
+            <button class="button button-primary" id="create-track" type="button">
+              <span aria-hidden="true">＋</span>
+              Создать трассу
+            </button>
+          </header>
+
+          <section class="library-section" aria-labelledby="examples-heading">
+            <h2 id="examples-heading">Готовые примеры</h2>
+            <div class="example-grid" id="example-grid"></div>
+          </section>
+
+          <section class="library-section" aria-labelledby="saved-heading">
+            <h2 id="saved-heading">Мои трассы</h2>
+            <div id="saved-track-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section
+        class="view editor-view"
+        id="editor-view"
+        data-view="editor"
+        aria-label="Редактор трассы"
+        hidden
+      >
+        <div class="editor-workspace" id="editor-workspace">
+          <canvas id="editor-canvas">
+            Браузер не поддерживает Canvas.
+          </canvas>
+
+          <div class="editor-tool-palette" aria-label="Инструменты редактора">
+            <button class="editor-tool is-active" data-editor-tool="route" type="button">
+              <span aria-hidden="true">⌁</span>
+              <strong>Маршрут</strong>
+            </button>
+            <button class="editor-tool" data-editor-tool="width" type="button">
+              <span aria-hidden="true">↔</span>
+              <strong>Ширина</strong>
+            </button>
+            <button class="editor-tool" data-editor-tool="erase" type="button">
+              <span aria-hidden="true">◇</span>
+              <strong>Ластик</strong>
+            </button>
+            <button class="editor-tool" data-editor-tool="vehicle" type="button">
+              <span aria-hidden="true">▯</span>
+              <strong>Машина</strong>
+            </button>
+            <button class="editor-tool" data-editor-tool="pan" type="button">
+              <span aria-hidden="true">✥</span>
+              <strong>Перемещение</strong>
+            </button>
+          </div>
+
+          <aside class="editor-property-panel" id="editor-property-panel">
+            <div data-tool-options="route">
+              <label class="range-control">
+                <span>
+                  Ширина нового участка
+                  <output id="route-width-output">80 px</output>
+                </span>
+                <input id="route-width" type="range" min="36" max="160" value="80" />
+              </label>
+              <p>Начните у синей точки, чтобы продолжить маршрут.</p>
+            </div>
+
+            <div data-tool-options="width" hidden>
+              <label class="range-control">
+                <span>
+                  Новая ширина
+                  <output id="width-brush-output">100 px</output>
+                </span>
+                <input id="width-brush-value" type="range" min="36" max="180" value="100" />
+              </label>
+              <label class="range-control">
+                <span>
+                  Радиус кисти
+                  <output id="width-radius-output">48 px</output>
+                </span>
+                <input id="width-brush-radius" type="range" min="20" max="100" value="48" />
+              </label>
+            </div>
+
+            <div data-tool-options="erase" hidden>
+              <label class="range-control">
+                <span>
+                  Радиус ластика
+                  <output id="eraser-radius-output">42 px</output>
+                </span>
+                <input id="eraser-radius" type="range" min="18" max="100" value="42" />
+              </label>
+              <p>Удалённый участок останется разрывом, а не скрытой перемычкой.</p>
+            </div>
+
+            <div data-tool-options="vehicle" hidden>
+              <strong class="tool-panel-title">Габарит машины: 18 × 32 px</strong>
+              <p>Нажмите на дорогу: hitbox привяжется к центру и покажет, помещается ли машина целиком.</p>
+            </div>
+
+            <div data-tool-options="pan" hidden>
+              <p>Перетаскивайте холст. Колесо меняет масштаб относительно курсора.</p>
+            </div>
+
+            <div data-tool-options="elevation" hidden>
+              <label class="range-control">
+                <span>
+                  Высота
+                  <output id="elevation-value-output">0 м</output>
+                </span>
+                <input id="elevation-value" type="range" min="-20" max="40" value="0" />
+              </label>
+              <label class="range-control">
+                <span>
+                  Радиус кисти
+                  <output id="elevation-radius-output">48 px</output>
+                </span>
+                <input id="elevation-radius" type="range" min="20" max="100" value="48" />
+              </label>
+            </div>
+          </aside>
+
+          <details class="relief-control">
+            <summary>Рельеф — экспериментально</summary>
+            <p>Высота уже влияет на скорость, но редактор и визуализация пока 2D.</p>
+            <button class="button button-secondary" id="elevation-tool" type="button">
+              Рисовать высоту
+            </button>
+          </details>
+
+          <p class="canvas-message" id="editor-message" role="status"></p>
+        </div>
+      </section>
+
+      <section
+        class="view simulation-view"
+        id="simulation-view"
+        data-view="simulation"
+        hidden
+      >
+        <div class="simulation-layout">
+          <section class="simulation-stage" aria-label="Визуализация симуляции">
+            <div class="simulation-canvas-wrap">
+              <canvas id="simulation-canvas">
+                Браузер не поддерживает Canvas.
+              </canvas>
+
+              <div class="simulation-top-overlays">
+                <div class="simulation-overlay-stack">
+                  <section
+                    class="track-view-panel"
+                    id="track-view-panel"
+                    aria-label="Просматриваемая трасса"
+                    hidden
+                  >
+                    <div
+                      class="track-view-tabs"
+                      id="track-view-tabs"
+                      role="tablist"
+                      aria-label="Трасса повтора"
+                    ></div>
+                    <button
+                      class="overlay-action track-weights-toggle"
+                      id="track-weights-toggle"
+                      type="button"
+                      aria-pressed="false"
+                    >
+                      Веса лидера
+                    </button>
+                  </section>
+                  <section
+                    class="replay-status"
+                    id="replay-status"
+                    aria-label="Состояние просмотра"
+                    hidden
+                  >
+                    <div>
+                      <span>Просмотр</span>
+                      <strong>Поколение <output id="viewed-generation">0</output></strong>
+                    </div>
+                    <div>
+                      <span>Рассчитано</span>
+                      <strong>Поколение <output id="latest-generation">0</output></strong>
+                    </div>
+                    <button
+                      class="overlay-action"
+                      id="follow-latest"
+                      type="button"
+                    >
+                      К последнему
+                    </button>
+                  </section>
+                </div>
+                <div class="simulation-overlay-stack simulation-overlay-stack-end">
+                  <section
+                    class="population-view-panel"
+                    aria-label="Отображение агентов"
+                    hidden
+                  >
+                    <div
+                      class="population-view"
+                      id="population-view"
+                      aria-label="Количество видимых агентов"
+                    >
+                      <button
+                        type="button"
+                        class="is-active"
+                        data-population-view="best"
+                        aria-pressed="true"
+                      >
+                        Лучший
+                      </button>
+                      <button
+                        type="button"
+                        data-population-view="top"
+                        aria-pressed="false"
+                      >
+                        Топ-5
+                      </button>
+                      <button
+                        type="button"
+                        data-population-view="all"
+                        aria-pressed="false"
+                      >
+                        Все
+                      </button>
+                    </div>
+                    <label class="sensor-toggle-control">
+                      <input id="sensor-toggle" type="checkbox" checked />
+                      <span>Сенсоры</span>
+                    </label>
+                    <output id="agent-count" class="agent-count">0 агентов</output>
+                    <div class="agent-legend" aria-label="Цвета агентов">
+                      <span><i class="is-followed"></i>Лидер</span>
+                      <span><i class="is-strong"></i>Сильные</span>
+                      <span><i class="is-medium"></i>Средние</span>
+                      <span><i class="is-weak"></i>Слабые</span>
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              <aside
+                class="track-weights-panel"
+                id="track-weights-panel"
+                aria-label="Веса лидера выбранной трассы"
+                hidden
+              >
+                <div>
+                  <strong id="track-weights-title">Веса лидера</strong>
+                  <span id="track-weights-summary">—</span>
+                </div>
+                <div
+                  class="track-weights-grid"
+                  id="track-weights-grid"
+                  aria-hidden="true"
+                ></div>
+                <button class="overlay-action" id="track-weights-details" type="button">
+                  Все веса
+                </button>
+              </aside>
+
+              <p class="simulation-canvas-label" id="simulation-canvas-label">
+                Машины появятся после запуска
+              </p>
+
+              <section
+                class="replay-transport"
+                id="replay-transport"
+                aria-label="Управление повтором"
+                hidden
+              >
+                <button
+                  class="transport-button"
+                  id="replay-previous"
+                  type="button"
+                  aria-label="Предыдущее поколение"
+                >
+                  <span aria-hidden="true">←</span>
+                </button>
+                <button
+                  class="transport-button transport-play"
+                  id="replay-play"
+                  type="button"
+                  aria-label="Воспроизвести повтор"
+                  aria-pressed="false"
+                >
+                  <span aria-hidden="true">▶</span>
+                </button>
+                <button
+                  class="transport-button"
+                  id="replay-next"
+                  type="button"
+                  aria-label="Следующее поколение"
+                >
+                  <span aria-hidden="true">→</span>
+                </button>
+                <label class="replay-progress-control">
+                  <span class="sr-only">Позиция в повторе</span>
+                  <input
+                    id="replay-progress"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value="0"
+                    step="0.1"
+                  />
+                </label>
+                <label class="replay-rate-control">
+                  <span class="sr-only">Скорость повтора</span>
+                  <select id="replay-rate" aria-label="Скорость повтора">
+                    <option value="0.25">0,25×</option>
+                    <option value="0.5">0,5×</option>
+                    <option value="1" selected>1×</option>
+                    <option value="2">2×</option>
+                    <option value="4">4×</option>
+                  </select>
+                </label>
+              </section>
+            </div>
+
+            <dl class="simulation-metrics" aria-label="Метрики запуска">
+              <div>
+                <dt>Поколение</dt>
+                <dd id="metric-generation">0</dd>
+              </div>
+              <div>
+                <dt>Лучший прогресс</dt>
+                <dd id="metric-progress">0%</dd>
+              </div>
+              <div>
+                <dt>Fitness</dt>
+                <dd>
+                  <button
+                    class="metric-fitness-button"
+                    id="metric-fitness"
+                    type="button"
+                    aria-label="Открыть график fitness"
+                  >
+                    0,000
+                  </button>
+                </dd>
+              </div>
+              <div>
+                <dt>Шагов</dt>
+                <dd id="metric-steps">0</dd>
+              </div>
+            </dl>
+          </section>
+
+          <aside class="simulation-controls" aria-labelledby="simulation-title">
+            <div class="simulation-heading">
+              <h1 id="simulation-title">Новый запуск</h1>
+              <span class="running-indicator" id="running-indicator" hidden>
+                <i aria-hidden="true"></i>
+                Обучение идёт
+              </span>
+            </div>
+
+            <form id="simulation-form">
+              <label class="field-control">
+                <span>Имя запуска</span>
+                <input
+                  id="run-name"
+                  name="run-name"
+                  type="text"
+                  value="Новый запуск"
+                  maxlength="80"
+                  autocomplete="off"
+                />
+              </label>
+
+              <label class="field-control">
+                <span>Основная трасса</span>
+                <select id="simulation-track-select"></select>
+              </label>
+
+              <details class="additional-tracks">
+                <summary>Дополнительные трассы</summary>
+                <div
+                  id="additional-track-options"
+                  class="additional-track-options"
+                  aria-label="Дополнительные трассы запуска"
+                ></div>
+              </details>
+
+              <label class="field-control">
+                <span>Как сравнивать трассы</span>
+                <select id="aggregate-mode">
+                  <option value="balanced">Сбалансированно</option>
+                  <option value="mean">Средний результат</option>
+                  <option value="worst">По худшей трассе</option>
+                </select>
+              </label>
+
+              <section class="baseline-description" aria-labelledby="baseline-heading">
+                <h2 id="baseline-heading">Базовый эволюционный алгоритм</h2>
+                <p>Встроенный baseline. Это ещё не решение ChatGPT или Gemini.</p>
+              </section>
+
+              <div class="simulation-form-grid">
+                <label class="field-control">
+                  <span>Размер популяции</span>
+                  <input
+                    id="population-size"
+                    type="number"
+                    min="6"
+                    max="120"
+                    step="2"
+                    value="40"
+                    inputmode="numeric"
+                  />
+                </label>
+
+                <label class="field-control">
+                  <span>Поколений</span>
+                  <input
+                    id="generation-limit"
+                    type="number"
+                    min="1"
+                    max="1000"
+                    value="50"
+                    inputmode="numeric"
+                  />
+                </label>
+
+                <label class="field-control">
+                  <span>Заезд, секунд</span>
+                  <input
+                    id="episode-duration"
+                    type="number"
+                    min="2"
+                    max="120"
+                    step="1"
+                    value="8"
+                    inputmode="numeric"
+                  />
+                </label>
+
+                <label class="field-control">
+                  <span>Seed</span>
+                  <input
+                    id="seed"
+                    type="number"
+                    min="0"
+                    max="4294967295"
+                    step="1"
+                    value="20260826"
+                    inputmode="numeric"
+                  />
+                </label>
+              </div>
+
+              <section
+                class="network-editor"
+                id="network-editor"
+                aria-labelledby="network-editor-heading"
+              >
+                <div class="network-editor-heading">
+                  <div>
+                    <p class="network-editor-kicker">Контроллер машины</p>
+                    <h2 id="network-editor-heading">Архитектура сети</h2>
+                  </div>
+                  <label class="network-preset-control" for="network-preset">
+                    <span>Готовая схема</span>
+                    <select id="network-preset">
+                      <option value="compact">8 → 8 → 3 · компактная</option>
+                      <option value="baseline" selected>8 → 10 → 3 · базовая</option>
+                      <option value="deep">8 → 16 → 8 → 3 · глубокая</option>
+                      <option value="wide">8 → 24 → 3 · широкая</option>
+                      <option value="custom" disabled hidden>
+                        Изменённая вручную
+                      </option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="network-editor-body">
+                  <div class="network-overview">
+                    <div
+                      class="network-diagram"
+                      id="network-diagram"
+                      role="img"
+                      aria-label="Сеть с 8 входами, одним скрытым слоем из 10 нейронов и 3 выходами"
+                      aria-describedby="network-explanation"
+                    >
+                      <div class="network-diagram-stage is-input">
+                        <span>Входы</span>
+                        <strong>8</strong>
+                        <small>7 лучей + скорость</small>
+                      </div>
+                      <span class="network-diagram-arrow" aria-hidden="true">→</span>
+                      <div class="network-diagram-stage is-hidden">
+                        <span>Скрытый слой</span>
+                        <strong>10</strong>
+                        <small>нейронов · tanh</small>
+                      </div>
+                      <span class="network-diagram-arrow" aria-hidden="true">→</span>
+                      <div class="network-diagram-stage is-output">
+                        <span>Выходы</span>
+                        <strong>3</strong>
+                        <small>руль · газ · тормоз</small>
+                      </div>
+                    </div>
+
+                    <div class="network-explanation" id="network-explanation">
+                      <p>
+                        <strong>Глубина</strong> — число скрытых слоёв.
+                        <strong>Ширина</strong> — число нейронов в каждом из них.
+                      </p>
+                      <p>
+                        Больше не всегда лучше: крупная сеть дольше обучается и
+                        может хуже находить устойчивое решение.
+                      </p>
+                      <p class="network-formula">
+                        Параметры слоя = входы × нейроны + смещения.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="network-layer-editor">
+                    <div class="network-layer-heading">
+                      <div>
+                        <h3>Скрытые слои</h3>
+                        <p>Меняйте глубину и ширину сети.</p>
+                      </div>
+                    </div>
+
+                    <div
+                      class="network-layers"
+                      id="network-layers"
+                      aria-label="Скрытые слои сети"
+                    >
+                      <div class="network-layer-row network-layer-shell">
+                        <div>
+                          <span>Скрытый слой 1</span>
+                          <strong>10 нейронов</strong>
+                        </div>
+                        <small>Функция активации tanh</small>
+                      </div>
+                    </div>
+
+                    <button
+                      class="button button-secondary network-add-layer"
+                      id="network-add-layer"
+                      type="button"
+                    >
+                      <span aria-hidden="true">＋</span>
+                      Добавить скрытый слой
+                    </button>
+
+                    <p
+                      class="network-parameter-count"
+                      id="network-parameter-count"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <strong>123</strong> обучаемых параметра
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <p class="budget-summary" id="budget-summary">
+                <strong>Бюджет: около 480 000 шагов.</strong>
+                40 агентов получат по 240 шагов в каждом из 50 поколений.
+                Расчёт выполняется локально.
+              </p>
+
+              <button class="button button-primary run-primary" id="simulation-start" type="submit">
+                Запустить обучение
+              </button>
+            </form>
+
+            <div class="running-controls" id="running-controls" hidden>
+              <dl class="running-summary">
+                <div>
+                  <dt>Трасса</dt>
+                  <dd id="running-track-name">Моя трасса</dd>
+                </div>
+                <div>
+                  <dt>Алгоритм</dt>
+                  <dd>Базовый эволюционный алгоритм</dd>
+                </div>
+              </dl>
+
+              <section class="throughput-card" aria-label="Скорость обучения">
+                <span>Производительность</span>
+                <strong id="simulation-throughput">— шагов/с</strong>
+                <small>Обучение и просмотр повтора работают независимо.</small>
+              </section>
+
+              <button class="button button-primary" id="simulation-pause" type="button">
+                Пауза обучения
+              </button>
+              <button class="button button-secondary" id="simulation-stop" type="button">
+                Завершить запуск
+              </button>
+
+              <fieldset class="speed-control">
+                <legend>Скорость обучения</legend>
+                <div>
+                  <button type="button" data-speed="normal" class="is-active">Обычно</button>
+                  <button type="button" data-speed="fast">Максимум</button>
+                </div>
+              </fieldset>
+            </div>
+
+            <p class="simulation-message" id="simulation-message" role="status"></p>
+
+            <section
+              class="run-result"
+              id="run-result"
+              aria-labelledby="run-result-heading"
+              hidden
+            >
+              <div class="panel-section-heading">
+                <div>
+                  <p class="eyebrow">Готово</p>
+                  <h2 id="run-result-heading">Результат запуска</h2>
+                </div>
+                <span>Локально</span>
+              </div>
+              <p id="run-result-summary" class="run-result-summary">
+                Выберите поколение в повторе и сохраните запуск или лучшую модель.
+              </p>
+              <label class="field-control">
+                <span>Название для сохранения</span>
+                <input
+                  id="save-run-name"
+                  name="save-run-name"
+                  type="text"
+                  maxlength="80"
+                  autocomplete="off"
+                />
+              </label>
+              <div class="run-result-actions">
+                <button class="button button-primary" id="save-run" type="button">
+                  Сохранить запуск
+                </button>
+                <button class="button button-secondary" id="continue-training" type="button">
+                  Продолжить обучение
+                </button>
+                <button class="button button-secondary" id="show-weights" type="button">
+                  Показать веса модели
+                </button>
+              </div>
+            </section>
+
+            <section class="saved-runs-section" aria-labelledby="saved-runs-heading">
+              <div class="panel-section-heading">
+                <h2 id="saved-runs-heading">Сохранённые запуски</h2>
+                <span>На этом Mac</span>
+              </div>
+              <div id="saved-runs" class="saved-runs">
+                <p class="saved-runs-empty">Сохранённых запусков пока нет.</p>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <dialog
+      class="fitness-dialog"
+      id="fitness-dialog"
+      aria-labelledby="fitness-dialog-title"
+    >
+      <div class="fitness-dialog-heading">
+        <div>
+          <p class="eyebrow">История обучения</p>
+          <h2 id="fitness-dialog-title">Fitness по поколениям</h2>
+          <p id="fitness-dialog-track">Выбранная трасса</p>
+        </div>
+        <button
+          class="dialog-close"
+          id="fitness-dialog-close"
+          type="button"
+          aria-label="Закрыть график fitness"
+        >
+          ×
+        </button>
+      </div>
+      <div class="fitness-chart" id="fitness-chart">
+        <svg
+          id="fitness-chart-svg"
+          viewBox="0 0 720 320"
+          role="img"
+          aria-label="График лучшего и медианного fitness по поколениям"
+        ></svg>
+        <div class="fitness-chart-points" id="fitness-chart-points"></div>
+      </div>
+      <div class="fitness-chart-footer">
+        <div class="fitness-chart-legend">
+          <span><i class="is-best"></i>Лучший fitness</span>
+          <span><i class="is-median"></i>Медиана</span>
+        </div>
+        <p id="fitness-chart-selection">
+          Нажмите на точку, чтобы открыть replay этого поколения.
+        </p>
+      </div>
+    </dialog>
+
+    <script type="module" src="/src/app.js"></script>
+  </body>
+</html>

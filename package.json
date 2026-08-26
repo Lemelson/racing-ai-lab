@@ -1,0 +1,28 @@
+{
+  "name": "racing-ai-lab",
+  "version": "0.1.0",
+  "description": "Local 2D laboratory for training, replaying, and comparing evolutionary self-driving agents.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lemelson/racing-ai-lab.git"
+  },
+  "homepage": "https://github.com/Lemelson/racing-ai-lab#readme",
+  "keywords": [
+    "evolutionary-algorithm",
+    "self-driving-car",
+    "neural-network",
+    "simulation",
+    "canvas",
+    "web-worker"
+  ],
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test",
+    "check": "node --check src/app.js && node --check src/training-worker.js && node --check src/core/catalog.js && node --check src/core/course.js && node --check src/core/dev-reload.js && node --check src/core/evolution.js && node --check src/core/experiment.js && node --check src/core/fitness.js && node --check src/core/network.js && node --check src/core/network-architecture.js && node --check src/core/presets.js && node --check src/core/random.js && node --check src/core/replay.js && node --check src/core/road-surface.js && node --check src/core/run-config.js && node --check src/core/sensors.js && node --check src/core/track-editor.js && node --check src/core/training-analysis.js && node --check src/core/training-worker-contract.js && node --check src/core/training.js && node --check src/core/vehicle-spec.js && node --check src/core/vehicle.js && node --check scripts/serve.mjs"
+  }
+}

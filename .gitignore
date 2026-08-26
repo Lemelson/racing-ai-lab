@@ -1,0 +1,13 @@
+.DS_Store
+node_modules/
+coverage/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+target/
+results/
+references/video/*.mp4
