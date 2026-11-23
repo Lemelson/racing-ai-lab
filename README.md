@@ -1,185 +1,144 @@
+<div align="center">
+
+**English** · [Русская версия](README.ru.md)
+
 # Racing AI Lab
 
-Локальная 2D-лаборатория для обучения, сравнения и визуального анализа
-эволюционных автомобильных агентов.
+**Interactive 2D browser laboratory for training, replaying, and comparing evolutionary self-driving AI agents — built with pure JavaScript, HTML5 Canvas, and multi-core Web Workers.**
 
-Проект вдохновлён видео commonLuke
-[«Can I Build a Better Self-Driving AI Than Claude?»](https://www.youtube.com/watch?v=GGWHjAyKJCA),
-но не копирует его код. Цель — создать воспроизводимую экспериментальную среду,
-в которой разные алгоритмы и реализации от разных AI-моделей можно обучать на
-одинаковых трассах, с одинаковой физикой и одинаковым вычислительным бюджетом.
+[![Launch Live Lab](https://img.shields.io/badge/Launch%20Live%20Lab-GitHub%20Pages-2563EB?style=for-the-badge&logo=googlechrome&logoColor=white)](https://lemelson.github.io/racing-ai-lab/)
+[![CI](https://github.com/Lemelson/racing-ai-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/Lemelson/racing-ai-lab/actions/workflows/ci.yml)
+[![Zero Dependencies](https://img.shields.io/badge/Dependencies-0%20runtime-16A34A)](package.json)
+[![Tests](https://img.shields.io/badge/Tests-98%20passing-0EA5E9)](tests/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-64748B)](LICENSE)
 
-> Текущий статус: рабочий browser-based 2D MVP. Редактор трасс, обучение,
-> многотрековая оценка, replay, анализ поколений, настраиваемые сети и локальное
-> сохранение уже работают. Отдельные реализации ChatGPT и Gemini ещё не
-> подключены и не выдаются интерфейсом за готовых участников.
+<h3>
+  <a href="https://lemelson.github.io/racing-ai-lab/">▶ Launch Live Lab in Browser</a>
+</h3>
 
-## Зачем нужен проект
+<p>No install, no backend, no build step — draw your own track and evolve neural-network drivers right in your browser.</p>
 
-Обычный ролик про самообучающиеся машины хорошо показывает результат, но часто
-не отвечает на важные исследовательские вопросы:
+<img src="docs/media/racing-demo.gif" alt="Racing AI Lab — live evolutionary self-driving simulation with 7-ray sensors on the Technical Loop track" width="960" />
 
-- действительно ли участники получили одинаковые условия;
-- не зависит ли результат от частоты событий мыши, FPS или длины трассы;
-- что именно считается прогрессом и можно ли эксплуатировать scoring;
-- можно ли воспроизвести обучение с тем же seed;
-- какая модель победила на каждой трассе, а не только в среднем;
-- можно ли сохранить веса, конфигурацию и replay для последующего анализа.
+</div>
 
-Racing AI Lab делает эти условия явными и проверяемыми.
+---
 
-## Что уже реализовано
+## Why Racing AI Lab?
 
-### Редактор трасс
+Inspired by commonLuke's video [*"Can I Build a Better Self-Driving AI Than Claude?"*](https://www.youtube.com/watch?v=GGWHjAyKJCA) (built completely from scratch without copying its code), **Racing AI Lab** turns viral self-driving demos into a **reproducible, verifiable neuroevolution sandbox**.
 
-- бесконечный 2D-холст с перемещением, масштабированием и режимом полного экрана;
-- рисование маршрута несколькими штрихами;
-- равномерное пересэмплирование ввода, независимое от скорости движения мыши;
-- явное замыкание начала и конца без скрытой прямой перемычки;
-- локальная кисть ширины дороги с видимым радиусом;
-- ластик, создающий настоящие разрывы;
-- экспериментальная кисть высоты;
-- проверка габарита автомобиля прямо на трассе;
-- сохранение неизменяемых версий пользовательских трасс;
-- встроенные примеры: простой овал, кольцо с подъёмом и техническая трасса.
+Typical self-driving demos look cool but rarely answer the hard experimental questions:
 
-Дорожное покрытие собирается как объединение сегментов и круглых соединений.
-Этот же контракт используется отрисовкой и проверкой столкновений, поэтому на
-поворотах не появляются ложные треугольные «дырки».
+- Did every competing algorithm run under **identical physics, sensors, and tracks**?
+- Is progress independent of **FPS, monitor refresh rate, or mouse drawing speed**?
+- Can agents exploit the **fitness function** by looping or clipping through corners?
+- Can you **reproduce an exact run** from its seed, inspect its weights, and replay any generation?
+- How do agents generalize across **multiple tracks** instead of memorizing a single oval?
 
-### Физика автомобиля и сенсоры
+Racing AI Lab makes every one of those guarantees explicit, deterministic, and backed by **98 automated contract tests**.
 
-- детерминированная 2D-кинематика с фиксированным timestep;
-- газ, тормоз и рулевое управление;
-- влияние уклона трассы на продольное ускорение;
-- общий физический габарит автомобиля `18 × 32 px`;
-- проверка корпуса по восьми точкам footprint;
-- завершение заезда при первом фактическом выходе корпуса за дорогу;
-- семь конфигурируемых сенсорных лучей;
-- нормализованные наблюдения и расстояния.
+> **Project Status:** Working browser-based 2D laboratory with track editor, multi-core Web Worker training, multi-track evaluation, decoupled replay, generation analytics, configurable neural networks, and local persistence. Independent competitor entries (`competitors/chatgpt`, `competitors/gemini`) are scaffolded as future benchmarks and are not mocked in the UI.
 
-### Эволюционное обучение
+---
 
-- seeded PRNG и воспроизводимые поколения;
-- elitism, crossover и mutation;
-- координатор обучения и автоматический пул Web Workers по числу CPU-потоков;
-- детерминированное распределение genomes между ядрами без изменения seed;
-- честный счётчик реально выполненных simulation steps;
-- обучение на одной или нескольких трассах;
-- отдельный sensor rig для каждой трассы;
-- одинаковый seeded-порядок трасс для всех genome в поколении;
-- три режима многотрековой оценки:
-  - средний результат;
-  - сбалансированный результат;
-  - результат по худшей трассе;
-- нормализация fitness относительно длины трассы;
-- защита от повторного начисления прогресса и скачков через финиш.
+## Screenshots
 
-### Настраиваемая нейросеть
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/media/simulation-training.png" alt="Live multi-core training on Technical Loop with 7 sensor rays and throughput telemetry" />
+      <p align="center"><strong>Live Multi-Core Training &amp; Telemetry</strong><br/>10 parallel Web Workers (12,000–16,800+ steps/s), 7 cyan raycast sensors, 10% reward gates, and real-time generation progress.</p>
+    </td>
+    <td width="50%">
+      <img src="docs/media/fitness-analytics.png" alt="Evolutionary fitness chart comparing best and median fitness across 35 generations" />
+      <p align="center"><strong>Generation Fitness Analytics</strong><br/>Interactive Best vs. Median fitness curve — click any generation point to jump straight into its replay.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/media/network-architecture.png" alt="Interactive neural network topology designer with live SVG diagram and parameter counter" />
+      <p align="center"><strong>Configurable Neural Network Designer</strong><br/>Presets (<code>8→8→3</code>, <code>8→10→3</code>, <code>8→16→8→3</code>, <code>8→24→3</code>) or custom 1–3 hidden layers with live topology preview and exact weight counts.</p>
+    </td>
+    <td width="50%">
+      <img src="docs/media/track-editor.png" alt="Infinite 2D track editor with variable road width brush and CAD-style toolbar" />
+      <p align="center"><strong>Infinite 2D Track Editor</strong><br/>Multi-stroke uniform resampling, variable-width brush, true-gap eraser, elevation brush, and exact vehicle footprint check.</p>
+    </td>
+  </tr>
+</table>
 
-Контроллер получает восемь входов:
+---
 
-1. семь расстояний от сенсоров;
-2. нормализованную скорость.
+## Key Features
 
-Он возвращает три действия:
+### Evolutionary Training & Multi-Core Web Workers
+- **Seeded PRNG & Bit-Identical Determinism** — identical track, seed, and config always produce the exact same evolution trajectory regardless of worker finish order.
+- **Automatic CPU Worker Pool** — detects `navigator.hardwareConcurrency` and spawns one evaluator Web Worker per logical core while keeping population ranking, elitism, crossover, and mutation centralized in the coordinator.
+- **Multi-Track Generalization** — train simultaneously across multiple tracks with a shared seeded track order and three aggregation strategies: **Mean**, **Balanced**, or **Worst-Track**.
+- **Anti-Exploit Fitness Scoring** — rewards verified forward distance and speed (`Δdistance × (1 + speed × 0.015) − 18` on crash); revisiting already-credited segments, driving backward, or cutting off-track yields zero progress.
 
-1. steering;
-2. throttle;
-3. brake.
+**Measured Local Benchmark (Apple M1 Max, 40 cars, 1 track, 30s episodes):**
 
-В интерфейсе доступны четыре готовые архитектуры и пользовательская настройка:
+| Mode | Throughput | Speedup | Result Parity |
+| --- | ---: | ---: | --- |
+| 1 Worker | 3,264 steps/s | 1.0× | Baseline |
+| 10 Workers (Auto) | **16,877 steps/s** | **~5.2×** | 100% identical fitness, progress & checkpoint |
 
-- `8 → 8 → 3`;
-- `8 → 10 → 3`;
-- `8 → 16 → 8 → 3`;
-- `8 → 24 → 3`;
-- от одного до трёх скрытых слоёв;
-- от 4 до 64 нейронов в каждом скрытом слое.
+### Deterministic 2D Vehicle Physics & 7-Ray Sensors
+- Fixed-timestep 2D kinematics (`throttle`, `brake`, `steering`) decoupled from display FPS.
+- Longitudinal acceleration responds to painted **track elevation grade**.
+- Exact **`18 × 32 px`** vehicle body checked via **8 footprint perimeter points** — runs end on the first real corner excursion, never waiting for the center point to leave the road.
+- **7 configurable raycast sensors** returning normalized wall distances plus normalized speed (8 inputs total).
 
-Интерфейс показывает схему сети и пересчитывает точное число обучаемых весов и
-смещений до запуска.
+### Configurable Feed-Forward Neural Network
+Each car is controlled by a `tanh`-activated feed-forward network taking **8 inputs** (7 sensor ray distances + normalized speed) and outputting **3 continuous controls** (`steering`, `throttle`, `brake`):
 
-### Replay и анализ обучения
+- Built-in presets: `8 → 8 → 3` (compact), `8 → 10 → 3` (baseline), `8 → 16 → 8 → 3` (deep), `8 → 24 → 3` (wide).
+- Custom topology builder: **1 to 3 hidden layers**, **4 to 64 neurons per layer**.
+- Live SVG network visualizer and exact trainable parameter count (`weights + biases`) before launch.
 
-- плавное воспроизведение уже рассчитанных кадров;
-- независимая пауза обучения и replay;
-- скорости воспроизведения `0.5×`, `1×`, `2×`, `4×`;
-- переход между поколениями;
-- режимы `Лучший`, `Топ-5`, `Все`;
-- один отслеживаемый лидер синего цвета;
-- цветовая шкала альтернативных агентов от зелёного через жёлтый к красному;
-- включение и выключение сенсорных лучей;
-- выбор анализируемой трассы в многотрековом запуске;
-- история fitness по поколениям;
-- данные лидера и альтернатив для выбранной трассы;
-- отображение производительности в simulation steps/second.
-- живой прогресс каждого поколения, ETA и фактическое число Workers;
-- выбор автоматического или ручного размера CPU-пула.
+### Infinite 2D Track Editor
+- Pan, zoom, fit-to-track, undo/redo, and fullscreen mode.
+- Multi-stroke drawing with **uniform arc-length resampling** (immune to fast/slow mouse movement) and explicit loop closure.
+- **Variable road-width brush** with visible radius, **true-gap eraser** (with bridge-stroke reconnection), **experimental elevation brush**, and on-track **vehicle footprint gauge**.
+- Unified road geometry contract (union of tapered segments + circular joints) shared by both the renderer and collision engine — zero false triangular gaps on tight inner corners.
+- Three built-in tracks: **Simple Oval**, **Hill Circuit**, and **Technical Loop**, plus immutable versioning for your custom tracks.
 
-### Использование всех ядер Apple Silicon
+### Decoupled Replay, Inspection & Local Persistence
+- Smooth frame-interpolated playback (`0.5×`, `1×`, `2×`, `4×`) independent of active training — pause training or scrub older generations without interrupting the worker pool.
+- View modes: **Best**, **Top-5**, or **All** agents — tracked leader in **blue**, alternatives color-graded from **green → yellow → red**.
+- Toggleable **7-ray sensors**, **10% progress reward gates**, and **leader weight inspector**.
+- Save named runs (config, immutable track versions, seed, network architecture, champion weights, and generation replays) locally in browser `localStorage` — zero accounts, zero telemetry, zero servers.
 
-Браузер сообщает `navigator.hardwareConcurrency`, после чего режим
-**Авто — максимум Mac** создаёт до одного evaluator Worker на каждый логический
-CPU-поток. Координатор сохраняет population, seed, ranking и mutation в одном
-месте, поэтому порядок завершения Workers не меняет результат эволюции.
+---
 
-Контрольный локальный прогон на M1 Max, `40` машин, одна трасса, `30` секунд:
+## Fair Comparison Protocol
 
-| Режим | Производительность |
-| --- | ---: |
-| 1 Worker | 3 264 шагов/с |
-| 10 Workers | 16 877 шагов/с |
-
-Это около `5,2×` ускорения при полностью совпавших fitness, progress и
-checkpoint. Абсолютные значения зависят от сложности трассы, фоновой нагрузки,
-температуры Mac и доли машин, которые рано сходят с трассы.
-
-### Локальные артефакты
-
-В браузере можно сохранять:
-
-- именованный запуск;
-- полную конфигурацию эксперимента;
-- набор и версии трасс;
-- seed и архитектуру сети;
-- итоговые метрики;
-- checkpoint лучшего контроллера;
-- веса модели;
-- replay и данные поколений.
-
-Сохранённый запуск можно снова открыть, продолжить обучение или использовать
-для просмотра весов. Данные остаются в локальном профиле браузера и не
-отправляются на сервер.
-
-## Принципы честного сравнения
-
-| Условие | Как обеспечивается |
+| Guarantee | Enforcement |
 | --- | --- |
-| Одинаковая физика | Все участники используют одно simulation core |
-| Одинаковые сенсоры | Семь лучей и скорость имеют общий контракт |
-| Одинаковые трассы | Версионированные definition фиксируются в запуске |
-| Одинаковый бюджет | Считаются реально выполненные simulation steps |
-| Воспроизводимость | Сохраняются seed, config, checkpoint и replay |
-| Многотрековая честность | Один порядок трасс применяется ко всем genome |
-| Защита scoring | Повторный проезд и off-track не дают прогресс |
-| Проверяемость | Core-контракты покрыты автоматическими тестами |
+| Identical physics | Every agent runs inside the same fixed-timestep simulation core |
+| Identical sensors | Shared 7-ray + speed normalized observation contract |
+| Identical tracks | Immutable versioned track definitions locked into each run |
+| Equal compute budget | Counts actual executed physical simulation steps, not wall-clock time |
+| Reproducibility | Seed, config, network topology, checkpoint, and replay saved together |
+| Multi-track fairness | Same seeded track ordering applied across every genome in a generation |
+| Anti-exploit scoring | Off-track movement, reverse driving, and finish-line jumps earn zero credit |
+| Verified invariants | Core physics, geometry, evolution, and worker contracts covered by 98 unit tests |
 
-Подробный протокол описан в
-[правилах эксперимента](docs/04-experiment-rules.md).
+Full experimental protocol: [docs/04-experiment-rules.md](docs/04-experiment-rules.md).
 
-## Быстрый запуск
+---
 
-### Требования
+## Quick Start
 
-- macOS, Linux или Windows;
-- современный браузер с Canvas, Web Worker и `structuredClone`;
-- Node.js 20 или новее;
-- npm.
+### Option 1 — Run Immediately in Your Browser
+Open the live GitHub Pages deployment (no installation needed):
 
-Внешних runtime-зависимостей у текущего MVP нет.
+👉 **[https://lemelson.github.io/racing-ai-lab/](https://lemelson.github.io/racing-ai-lab/)**
 
-### Запуск
+### Option 2 — Run Locally
+
+**Requirements:** Node.js `>= 20` and a modern browser with HTML5 Canvas, Module Web Workers, and `structuredClone`. Zero `npm install` needed — there are no external runtime dependencies.
 
 ```bash
 git clone https://github.com/Lemelson/racing-ai-lab.git
@@ -187,142 +146,98 @@ cd racing-ai-lab
 npm start
 ```
 
-По умолчанию приложение откроется на:
+Open `http://127.0.0.1:4173` (or pick a custom port with `PORT=4174 npm start`). The built-in dev server disables HTTP caching and auto-reloads open tabs on code edits (deferring reload if you have an active track draft open).
 
-```text
-http://127.0.0.1:4173
-```
-
-Другой порт:
+### Run Checks & Tests
 
 ```bash
-PORT=4174 npm start
+npm run check   # Syntax validation across all ES modules
+npm test        # Runs all 98 Node.js test runner specs
 ```
 
-Локальный сервер отключает HTTP-кеширование и автоматически обновляет открытые
-вкладки после изменения исходников. Если открыт редактор с черновиком,
-обновление откладывается до выхода из редактора.
+---
 
-### Проверки
-
-```bash
-npm run check
-npm test
-```
-
-В текущей версии проходят 98 автоматических тестов.
-
-## Как пользоваться
-
-1. Откройте раздел **Трассы**.
-2. Выберите готовый пример или создайте собственную трассу.
-3. Замкните маршрут и сохраните версию.
-4. Перейдите в **Симуляцию**.
-5. Выберите основную и дополнительные трассы.
-6. Настройте population, поколения, длительность заезда, seed, сеть и CPU Workers.
-7. Запустите обучение.
-8. Переключайтесь между поколениями, трассами и количеством видимых агентов.
-9. Сохраните лучший запуск, checkpoint и replay.
-
-## Архитектура
+## Architecture
 
 ```text
-Track editor ──> versioned track definitions
+Track Editor ──▶ Immutable versioned track definitions
                         │
                         ▼
-UI thread ─────> training-worker.js ─────> evolution coordinator
-    │                       │                    │
-    │                       ▼                    ▼
-    │             evaluator Worker pool    ranking + mutation
-    │                 │   │   │                  │
-    │                 ▼   ▼   ▼                  ▼
-    └──── smooth replay <── generation artifacts
+UI Thread ─────▶ training-worker.js ─────▶ Evolution Coordinator
+    │                    │                        │
+    │                    ▼                        ▼
+    │          Evaluator Worker Pool      Ranking + Crossover + Mutation
+    │              │     │     │                  │
+    │              ▼     ▼     ▼                  ▼
+    └─── Smooth Replay ◀──── Generation Artifacts & Telemetry
                 │
                 ▼
-      charts, agents, sensors, weights
+     Fitness Chart · Agents · 7-Ray Sensors · Weight Inspector
 ```
 
-Основные модули:
+### Core Modules
 
-| Путь | Назначение |
+| Path | Responsibility |
 | --- | --- |
-| `src/app.js` | UI, редактор, renderer, replay и orchestration |
-| `src/training-worker.js` | Координатор поколения и пула CPU Workers |
-| `src/training-evaluator-worker.js` | Независимая оценка batches genomes |
-| `src/core/course.js` | Трасса, проекция, прогресс и raycast |
-| `src/core/road-surface.js` | Общая геометрия дорожного покрытия |
-| `src/core/vehicle.js` | Детерминированная физика автомобиля |
-| `src/core/sensors.js` | Семь сенсорных лучей |
-| `src/core/network.js` | Feed-forward neural network |
-| `src/core/network-architecture.js` | Пресеты и пользовательские topology |
-| `src/core/evolution.js` | Genome, mutation, crossover и elitism |
-| `src/core/fitness.js` | Проверяемый scoring |
-| `src/core/training.js` | Оценка population на наборах трасс |
-| `src/core/training-pool.js` | Выбор числа Workers и балансировка задач |
-| `src/core/training-analysis.js` | Лидеры трасс и история fitness |
-| `src/core/replay.js` | Интерполяция и история replay |
-| `src/core/catalog.js` | Локальные версии трасс и сохранённые запуски |
+| `src/app.js` | UI views, track editor, Canvas renderer, replay player & run orchestration |
+| `src/training-worker.js` | Generation coordinator and multi-core Web Worker pool manager |
+| `src/training-evaluator-worker.js` | Parallel batch evaluation of genomes across compiled tracks |
+| `src/core/course.js` | Track compilation, centerline projection, progress tracking & raycasting |
+| `src/core/road-surface.js` | Unified variable-width road geometry for rendering & collision |
+| `src/core/vehicle.js` | Deterministic 2D vehicle kinematics and 8-point footprint checks |
+| `src/core/sensors.js` | Configurable 7-ray sensor rig and normalized observations |
+| `src/core/network.js` | Feed-forward neural network inference (`tanh`) |
+| `src/core/network-architecture.js` | Presets, custom layer validation, and exact parameter counting |
+| `src/core/evolution.js` | Seeded PRNG, elitism, crossover, and Gaussian mutation |
+| `src/core/fitness.js` | Verifiable anti-exploit fitness scoring |
+| `src/core/training.js` | Multi-track population evaluation and aggregation |
+| `src/core/training-pool.js` | Dynamic CPU core sizing and balanced task queue scheduling |
+| `src/core/training-analysis.js` | Per-track leaderboards, fitness history & live ETA telemetry |
+| `src/core/replay.js` | Smooth sub-step interpolation and generation replay history |
+| `src/core/catalog.js` | Local persistence for versioned tracks and saved runs |
 
-## Структура репозитория
+---
+
+## Repository Structure
 
 ```text
 .
-├── competitors/          # будущие независимые реализации участников
-├── docs/                 # задача, видео, архитектура и правила
-├── public/assets/        # безопасные визуальные ресурсы
-├── references/           # UI-концепты и разрешённые кадры исследования
-├── scripts/serve.mjs     # локальный no-cache/dev-reload сервер
-├── src/                  # приложение и simulation core
-└── tests/                # Node.js test suite
+├── index.html            # Application shell & interactive views
+├── src/                  # Vanilla JS UI, Web Workers & deterministic simulation core
+├── tests/                # 98 automated Node.js unit & contract tests
+├── scripts/serve.mjs     # Zero-dependency local dev server with live reload
+├── docs/                 # Architecture specs, experiment rules & media assets
+├── competitors/          # Future independent AI competitor workspaces (ChatGPT, Gemini)
+├── public/assets/        # Safe static visual assets
+└── references/           # UI design concepts & research notes
 ```
 
-## Локальные данные и приватность
+---
 
-- приложение не требует аккаунта;
-- нет аналитики и внешнего backend;
-- трассы и запуски сохраняются в `localStorage` текущего браузерного профиля;
-- локальные данные браузера не входят в Git и не публикуются на GitHub;
-- исходное MP4-видео исключено из репозитория;
-- удаление browser storage удалит локальные трассы и запуски, поэтому важные
-  артефакты следует дополнительно экспортировать после появления export-flow.
+## Documentation & Roadmap
 
-## Документация
+- [01 — Intent and Understanding](docs/01-intent-and-understanding.md) *(RU)*
+- [02 — Video Breakdown](docs/02-video-breakdown.md) *(RU)*
+- [03 — Proposed Architecture](docs/03-proposed-architecture.md) *(RU)*
+- [04 — Fair Experiment Rules](docs/04-experiment-rules.md) *(RU)*
+- [05 — Open Questions](docs/05-open-questions.md) *(RU)*
+- [06 — MVP Implementation Notes](docs/06-mvp-implementation.md) *(RU)*
 
-- [Исходный замысел и понимание задачи](docs/01-intent-and-understanding.md)
-- [Разбор видео](docs/02-video-breakdown.md)
-- [Предлагаемая архитектура](docs/03-proposed-architecture.md)
-- [Правила честного эксперимента](docs/04-experiment-rules.md)
-- [Открытые вопросы](docs/05-open-questions.md)
-- [Реализованный MVP](docs/06-mvp-implementation.md)
-- [Рабочая область ChatGPT](competitors/chatgpt/README.md)
-- [Рабочая область Gemini](competitors/gemini/README.md)
-- [Локальные материалы видео](references/video/README.md)
+**Planned Next Steps:**
+1. JSON export/import for tracks, checkpoints, and replays.
+2. Versioned participant contract for head-to-head AI model benchmarks (ChatGPT, Gemini, Claude).
+3. Held-out validation track suites and multi-seed statistical runs.
+4. Compute backend benchmarks (JS Workers vs. Rust/WASM vs. native Apple Silicon / MLX).
+5. Headless CLI training runner and optional 3D elevation rendering on top of the same core contracts.
 
-## Ограничения текущей версии
+---
 
-- это 2D-симуляция, а не модель настоящего автомобиля;
-- рельеф влияет на физику, но пока отображается в 2D;
-- все вычисления выполняются локально в браузере;
-- большие population и длинные replay могут потреблять заметную память;
-- экспорт/импорт локальных данных отдельным файлом ещё не реализован;
-- ChatGPT, Gemini и другие AI-участники пока представлены только рабочими
-  папками и manifest-заготовками;
-- Rust/WASM, Metal, MLX и 3D рассматриваются как последующие этапы после
-  профилирования текущего bottleneck.
+## Privacy & Disclaimer
 
-## Дальнейшее развитие
+- Runs **100% client-side** in your browser — no account, no analytics, no external API calls.
+- Saved tracks and runs live strictly in your browser's `localStorage`.
+- Created as a personal educational and experimental neuroevolution lab. Not affiliated with commonLuke, OpenAI, Google, or any automotive manufacturer. Results are strictly for simulation research.
 
-1. Экспорт и импорт трасс, запусков, checkpoint и replay.
-2. Отдельный versioned participant contract.
-3. Независимые реализации ChatGPT и Gemini.
-4. Validation-наборы и несколько seeds на эксперимент.
-5. Benchmark JavaScript, Worker, Rust/WASM и MLX/MPS на Apple Silicon.
-6. Headless runner для максимально быстрого обучения.
-7. 3D-визуализация и более подробная физика без изменения core-контрактов.
+## License
 
-## Происхождение и ответственность
-
-Проект создан как личная образовательная и исследовательская лаборатория.
-Он не связан с commonLuke, авторами исходного видео, OpenAI, Google или
-производителями автомобилей. Используйте результаты как экспериментальные, а не
-как доказательство безопасности реальных автономных систем.
+Released under the [MIT License](LICENSE) © 2026 Artyom Lemelson.

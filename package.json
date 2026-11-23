@@ -1,7 +1,8 @@
 {
   "name": "racing-ai-lab",
   "version": "0.1.0",
-  "description": "Local 2D laboratory for training, replaying, and comparing evolutionary self-driving agents.",
+  "description": "Interactive 2D browser lab for training, replaying, and comparing evolutionary self-driving AI agents — pure JS, HTML5 Canvas & Web Workers.",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +12,7 @@
     "type": "git",
     "url": "https://github.com/Lemelson/racing-ai-lab.git"
   },
-  "homepage": "https://github.com/Lemelson/racing-ai-lab#readme",
+  "homepage": "https://lemelson.github.io/racing-ai-lab/",
   "keywords": [
     "evolutionary-algorithm",
     "self-driving-car",
